@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "minitools"
+version = "0.1.0"
+description = ""
+authors = ["tak-akashi <tak.akashi@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+tweepy = "^4.14.0"
+openai = "^1.51.0"
+notion-client = "^2.2.1"
+python-dotenv = "^1.0.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
