@@ -1,5 +1,6 @@
 import os
 import requests
+import json
 import feedparser
 import ollama
 from typing import List
@@ -26,6 +27,10 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 
+NOTION_API_KEY = os.getenv("NOTION_API_KEY")
+DATABASE_ID = os.getenv("NOTION_DB_ID")
+
+
 def search_arxiv(queries: List[str], start_date: str, end_date: str, max_results: int):
     """
     arXiv APIを使用して、指定されたクエリ、日付範囲、最大結果数に基づいて論文を検索する関数。
@@ -43,7 +48,7 @@ def search_arxiv(queries: List[str], start_date: str, end_date: str, max_results
     url = "http://export.arxiv.org/api/query"
 
     # 複数の語句を " AND " で結合してクエリを作成
-    search_query = ' AND '.join(queries)
+    search_query = " AND ".join(queries)
 
     # パラメータの設定
     params = {
@@ -94,9 +99,77 @@ def tranlate_to_japanese_with_ollama(text: str, model="gemma2"):
     return abs["message"]["content"]
 
 
-def main(queries: List[str], start_date: str, end_date: str, max_results: int):
+# Notion APIにデータを送信する関数
+def add_to_notion(title, published_date, updated_date, summary, translated_summary, url):
+    api_url = "https://api.notion.com/v1/pages"
+    headers = {
+        "Authorization": f"Bearer {NOTION_API_KEY}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28"
+    }
 
-    logger.info(f"Searching papers from {start_date} to {end_date} with queries: {queries}")
+    # Notionに送るデータ（データベースに合わせて調整が必要）
+    data = {
+        "parent": { "database_id": DATABASE_ID },
+        "properties": {
+            "タイトル": {
+                "title": [
+                    {
+                        "text": {
+                            "content": title
+                        }
+                    }
+                ]
+            },
+            "公開日": {
+                "date": {
+                    "start": published_date,
+                    "end": None
+                }
+            },
+            "更新日": {
+                "date": {
+                    "start": updated_date,
+                    "end": None
+                }
+            },
+            "概要": {
+                "rich_text": [
+                    {
+                        "text": {
+                            "content": summary
+                        }
+                    }
+                ]
+            },
+            "日本語訳": {
+                "rich_text": [
+                    {
+                        "text": {
+                            "content": translated_summary
+                        }
+                    }
+                ]
+            },
+            "URL": {
+                "url": url
+            }
+        }
+    }
+
+    # POSTリクエストでデータをNotionに送信
+    response = requests.post(api_url, headers=headers, data=json.dumps(data))
+    
+    if response.status_code == 200:
+        logger.info(f"Added '{title}' to Notion.")
+    else:
+        logger.error(f"Failed to add data to Notion. Status code: {response.status_code}, Response: {response.text}")
+
+
+
+def main(queries: List[str], start_date: str, end_date: str, max_results: int, save_to_csv: bool=False):
+
+    logger.info(f"Searching max {max_results} papers from {start_date} to {end_date} with queries: {queries}")
     # 論文を検索
     papers = search_arxiv(queries, start_date.replace("-", ""), end_date.replace("-", ""), max_results)
     logger.info(f"Found {len(papers)} papers")
@@ -105,17 +178,26 @@ def main(queries: List[str], start_date: str, end_date: str, max_results: int):
     for i, paper in enumerate(papers):
         logger.info(f"Translating summary of {paper['title']} ({i+1}/{len(papers)})")
         translated_summary = tranlate_to_japanese_with_ollama(paper["summary"])
-        all_summaries.append(
-            [paper['title'], paper["updated_date"], paper["published_date"],
+        add_to_notion(paper['title'], paper["updated_date"], paper["published_date"],
+                          paper["summary"], translated_summary, paper['pdf_url'])
+        if save_to_csv:
+            all_summaries.append(
+                [paper['title'], paper["updated_date"], paper["published_date"],
              paper["summary"], translated_summary, paper['pdf_url']])
-    logger.info(f"Translated {len(papers)} papers, and start to save to csv")
 
-    df = pd.DataFrame(all_summaries, columns=[
-        "Title", "Updated Date", "Published Date", "Summary", "Translated Summary", "PDF URL"])
-    output_path = os.path.join(os.path.dirname(__file__), "outputs",
+    logger.info(f"Translated and saved to Notion all {len(papers)} papers.")
+
+    if save_to_csv:
+        logger.info(f"Saving to csv")
+        # 出力ディレクトリがなければ作成
+        if not os.path.exists(os.path.join(os.path.dirname(__file__), "outputs")):
+            os.makedirs(os.path.join(os.path.dirname(__file__), "outputs"))
+        df = pd.DataFrame(all_summaries, columns=[
+            "Title", "Updated Date", "Published Date", "Summary", "Translated Summary", "PDF URL"])
+        output_path = os.path.join(os.path.dirname(__file__), "outputs",
             "arxiv_summary_" + start_date.replace("/", "") + "_" + end_date.replace("/", "") + "_" + str(max_results) + "results.csv")
-    df.to_csv(output_path, index=False, encoding="utf-8-sig")
-    logger.info(f"Saved to {output_path}")
+        df.to_csv(output_path, index=False, encoding="utf-8-sig")
+        logger.info(f"Saved to {output_path}")
 
 
 if __name__ == "__main__":
@@ -123,14 +205,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     jst = pytz.timezone('Asia/Tokyo')
-    a_week_ago = (datetime.now(jst) - timedelta(days=7)).strftime("%Y-%m-%d")
-    today = datetime.today().strftime("%Y-%m-%d")
+    today = datetime.now(jst).strftime("%Y-%m-%d")
 
-    parser.add_argument('-q', '--queries', type=List[str], default=["LLM", "RAG"])
-    parser.add_argument('-s', '--start_date', type=str, default=a_week_ago)
-    parser.add_argument('-e', '--end_date', type=str, default=today)
+    parser.add_argument('-q', '--queries', type=List[str], default=["LLM", "(RAG OR FINETUNING)"])
+    parser.add_argument('-d', '--days_before', type=int, default=1)
+    parser.add_argument('-b', '--base_date', type=str, default=today)
     parser.add_argument('-r', '--max_results', type=int, default=50)
-
+    parser.add_argument('-c', '--save_to_csv', action='store_true', default=False)
     args = parser.parse_args()
-
-    main(args.queries, args.start_date, args.end_date, args.max_results)
+    
+    start_date = (datetime.now(jst) - timedelta(days=args.days_before)).strftime("%Y-%m-%d")
+        
+    main(args.queries, start_date, args.base_date, args.max_results, args.save_to_csv)
