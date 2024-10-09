@@ -11,13 +11,18 @@ import argparse
 import logging
 
 
+jst = pytz.timezone('Asia/Tokyo')
+today = datetime.now(jst).strftime("%Y-%m-%d")
+now = datetime.now(jst).strftime("%Y-%m-%d %H:%M:%S")
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-# h = logging.FileHandler("outputs/get_arxiv_abs_in_ja.log")
-# logger.addHandler(h)
+logger.setLevel(logging.INFO)
+# ファイルハンドラの作成
+h = logging.FileHandler(f"outputs/logs/arxiv_{now.replace("-", "").replace(" ", "_").replace(":", "")}.log")
+logger.addHandler(h)
 # コンソールハンドラの作成
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)  # DEBUGレベル以上のすべてのログを出力
+console_handler.setLevel(logging.INFO)  # INFOレベル以上のすべてのログを出力
 
 # フォーマッタの作成とハンドラへの設定
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
