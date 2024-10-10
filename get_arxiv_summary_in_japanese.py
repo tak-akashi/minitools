@@ -11,9 +11,6 @@ import argparse
 import logging
 
 
-jst = pytz.timezone('Asia/Tokyo')
-today = datetime.now(jst).strftime("%Y-%m-%d")
-now = datetime.now(jst).strftime("%Y-%m-%d %H:%M:%S")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
