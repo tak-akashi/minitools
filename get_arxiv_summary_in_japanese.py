@@ -17,19 +17,21 @@ now = datetime.now(jst).strftime("%Y-%m-%d %H:%M:%S")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-# ファイルハンドラの作成
-h = logging.FileHandler(f"outputs/logs/arxiv_{now.replace("-", "").replace(" ", "_").replace(":", "")}.log")
-logger.addHandler(h)
+
 # コンソールハンドラの作成
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)  # INFOレベル以上のすべてのログを出力
 
 # フォーマッタの作成とハンドラへの設定
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
-
 # ロガーにハンドラを追加
 logger.addHandler(console_handler)
+
+# ファイルハンドラの作成
+file_handler = logging.FileHandler("outputs/logs/arxiv.log", mode="a")
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
 
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
@@ -61,7 +63,7 @@ def search_arxiv(queries: List[str], start_date: str, end_date: str, max_results
         "start": 0,
         "max_results": max_results,
         "sortBy": "submittedDate",
-        "sortOrder": "descending",
+        "sortOrder": "ascending",
     }
 
     # APIリクエスト
