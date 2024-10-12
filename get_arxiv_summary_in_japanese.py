@@ -173,7 +173,7 @@ def add_to_notion(title, published_date, updated_date, summary, translated_summa
 
 def main(queries: List[str], start_date: str, end_date: str, max_results: int, save_to_csv: bool=False):
 
-    logger.info(f"Searching max {max_results} papers from {start_date} to {end_date} with queries: {queries}")
+    logger.info(f"Searching max {max_results} papers from {start_date} 00:00:00 to {end_date} 23:59:59 with queries: {queries}")
     # 論文を検索
     papers = search_arxiv(queries, start_date.replace("-", ""), end_date.replace("-", ""), max_results)
     logger.info(f"Found {len(papers)} papers")
@@ -209,15 +209,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     jst = pytz.timezone('Asia/Tokyo')
-    today = datetime.now(jst).strftime("%Y-%m-%d")
+    # today = datetime.now(jst).strftime("%Y-%m-%d")
+    yesterday = (datetime.now(jst) - timedelta(days=1)).strftime("%Y-%m-%d")
 
     parser.add_argument('-q', '--queries', type=List[str], default=["LLM", "(RAG OR FINETUNING)"])
     parser.add_argument('-d', '--days_before', type=int, default=1)
-    parser.add_argument('-b', '--base_date', type=str, default=today)
+    parser.add_argument('-b', '--base_date', type=str, default=yesterday)
     parser.add_argument('-r', '--max_results', type=int, default=50)
     parser.add_argument('-c', '--save_to_csv', action='store_true', default=False)
     args = parser.parse_args()
     
-    start_date = (datetime.now(jst) - timedelta(days=args.days_before)).strftime("%Y-%m-%d")
+    start_date = (datetime.strptime(args.base_date, "%Y-%m-%d") - timedelta(days=args.days_before - 1)).strftime("%Y-%m-%d")
         
     main(args.queries, start_date, args.base_date, args.max_results, args.save_to_csv)
