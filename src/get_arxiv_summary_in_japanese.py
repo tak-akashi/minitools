@@ -11,6 +11,7 @@ import argparse
 import logging
 
 
+print(os.path.dirname(__file__))
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -194,8 +195,9 @@ def main(queries: List[str], start_date: str, end_date: str, max_results: int, s
     if save_to_csv:
         logger.info(f"Saving to csv")
         # 出力ディレクトリがなければ作成
-        if not os.path.exists(os.path.join(os.path.dirname(__file__), "outputs")):
-            os.makedirs(os.path.join(os.path.dirname(__file__), "outputs"))
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "outputs")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
         df = pd.DataFrame(all_summaries, columns=[
             "Title", "Updated Date", "Published Date", "Summary", "Translated Summary", "PDF URL"])
         output_path = os.path.join(os.path.dirname(__file__), "outputs",
