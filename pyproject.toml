@@ -23,6 +23,8 @@ feedparser = "^6.0.11"
 llama-index-llms-gemini = "^0.3.6"
 mlx-whisper = "^0.3.0"
 yt-dlp = "^2024.10.7"
+pymupdf = "^1.24.11"
+azure-ai-formrecognizer = "^3.3.3"
 
 
 [build-system]

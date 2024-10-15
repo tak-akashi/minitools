@@ -40,7 +40,7 @@ def download_youtube_audio(url, output_path):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'outtmpl': os.path.join(temp_dir, 'audio'),
+        'outtmpl': os.path.join(temp_dir, '%(id)s.%(ext)s'),
         'ffmpeg_location': '/opt/homebrew/bin/ffmpeg',
     }
     
@@ -118,18 +118,19 @@ def main(youtube_url, output_path, model_path):
     # YouTubeから音声をダウンロード
     download_youtube_audio(youtube_url, output_path)
 
-    audio_file = os.path.join(output_path, "temp", "audio.mp3")
+    video_id = youtube_url.split("v=")[1]
+    audio_file = os.path.join(output_path, "temp", f"{video_id}.mp3")
 
     # 音声を文字起こし
     if os.path.exists(audio_file):
         text = transcribe_audio(audio_file, model_path)
         if text:
-            save_to_file(text["text"], os.path.join(output_path, "audio_transcript.txt"))
-            logger.info(f"Transcribed audio and saved to {os.path.join(output_path, "audio_transcript.txt")}") 
+            save_to_file(text["text"], os.path.join(output_path, f"{video_id}_transcript.txt"))
+            logger.info(f"Transcribed audio and saved to {os.path.join(output_path, f"audio_transcript_{video_id}.txt")}") 
             logger.info(f"Summarizing and translating audio...")
             summary_and_translate = get_summary_and_translate(text['text'])  # text['text'] を渡す
             if summary_and_translate:
-                save_to_file(summary_and_translate, os.path.join(output_path, "youtube_summary.txt"))
+                save_to_file(summary_and_translate, os.path.join(output_path, f"{video_id}_summary.txt"))
                 logger.info("Successfully processed YouTube video.")
             else:
                 logger.error("Failed to summarize and translate the text.")

@@ -53,7 +53,7 @@ def search_arxiv(queries: List[str], start_date: str, end_date: str, max_results
     url = "http://export.arxiv.org/api/query"
 
     # 複数の語句を " AND " で結合してクエリを作成
-    search_query = " AND ".join(queries)
+    search_query = " OR ".join(queries)
 
     # パラメータの設定
     params = {
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     # today = datetime.now(jst).strftime("%Y-%m-%d")
     yesterday = (datetime.now(jst) - timedelta(days=1)).strftime("%Y-%m-%d")
 
-    parser.add_argument('-q', '--queries', type=List[str], default=["LLM", "(RAG OR FINETUNING)"])
+    parser.add_argument('-q', '--queries', type=List[str], default=["LLM AND (RAG OR FINETUNING)", "SLM AND (RAG OR FINETUNING)"])
     parser.add_argument('-d', '--days_before', type=int, default=1)
     parser.add_argument('-b', '--base_date', type=str, default=yesterday)
     parser.add_argument('-r', '--max_results', type=int, default=50)
