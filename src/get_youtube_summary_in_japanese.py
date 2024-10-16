@@ -147,14 +147,15 @@ def main(youtube_url, output_path, model_path):
 
 if __name__ == "__main__":
 
-    youtube_url = "https://www.youtube.com/watch?v=B4oHJpEJBAA"  # 例としてのURL
-    output_path = "outputs"
+   
+    youtube_url = "https://www.youtube.com/watch?v=" # ここにURLを入力（v=以降にURL_IDのみ）
+    output_dir = "outputs"
     model_path = "mlx-community/whisper-large-v3-turbo"
 
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--youtube_url', type=str, default=youtube_url)
-    parser.add_argument('-o', '--output_dir', type=str, default=output_path)
+    parser.add_argument('-o', '--output_dir', type=str, default=output_dir)
     parser.add_argument('-m', '--model_path', type=str, default=model_path)
     args = parser.parse_args()
 
