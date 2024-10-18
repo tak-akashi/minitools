@@ -40,7 +40,7 @@ def search_arxiv(queries: List[str], start_date: str, end_date: str, max_results
     """
     arXiv APIを使用して、指定されたクエリ、日付範囲、最大結果数に基づいて論文を検索する関数。
 
-    Arguments:
+    Args:
     queries (List[str]): 検索語のリスト
     start_date (str): 検索開始日（YYYYMMDD形式）
     end_date (str): 検索終了日（YYYYMMDD形式）
@@ -91,9 +91,12 @@ def tranlate_to_japanese_with_ollama(text: str, model="gemma2"):
     """
     ollamaを使用して日本語に翻訳する関数
 
-    :param text: 翻訳する英語のテキスト
-    :param model: 使用するollamaモデル（デフォルトは"gemma2"）
-    :return: 日本語に翻訳されたテキスト
+    Args:
+    text (str): 翻訳する英語のテキスト
+    model (str): 使用するollamaモデル（デフォルトは"gemma2"）
+
+    Returns:
+    str: 日本語に翻訳されたテキスト
     """
     abs = ollama.chat(model=model, messages=[
         {
@@ -105,7 +108,7 @@ def tranlate_to_japanese_with_ollama(text: str, model="gemma2"):
 
 
 # Notion APIにデータを送信する関数
-def add_to_notion(title, published_date, updated_date, summary, translated_summary, url):
+def add_to_notion(title, published_date, updated_date, summary, translated_summary, url, error_flag=False):
     api_url = "https://api.notion.com/v1/pages"
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -169,6 +172,9 @@ def add_to_notion(title, published_date, updated_date, summary, translated_summa
         logger.info(f"Added '{title}' to Notion.")
     else:
         logger.error(f"Failed to add data to Notion. Status code: {response.status_code}, Response: {response.text}")
+        error_flag = True
+
+    return error_flag
 
 
 
@@ -180,17 +186,20 @@ def main(queries: List[str], start_date: str, end_date: str, max_results: int, s
     logger.info(f"Found {len(papers)} papers")
 
     all_summaries = []
+    error_counts = 0
     for i, paper in enumerate(papers):
         logger.info(f"Translating summary of {paper['title']} ({i+1}/{len(papers)})")
         translated_summary = tranlate_to_japanese_with_ollama(paper["summary"])
-        add_to_notion(paper['title'], paper["updated_date"], paper["published_date"],
+        error_flag = add_to_notion(paper['title'], paper["updated_date"], paper["published_date"],
                           paper["summary"], translated_summary, paper['pdf_url'])
+        if error_flag:
+            error_counts += 1
         if save_to_csv:
             all_summaries.append(
                 [paper['title'], paper["updated_date"], paper["published_date"],
              paper["summary"], translated_summary, paper['pdf_url']])
 
-    logger.info(f"Translated and saved to Notion all {len(papers)} papers.")
+    logger.info(f"Translated and saved to Notion {len(papers) - error_counts} papers. {error_counts} papers were not saved.")
 
     if save_to_csv:
         logger.info(f"Saving to csv")
