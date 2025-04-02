@@ -87,7 +87,7 @@ def search_arxiv(queries: List[str], start_date: str, end_date: str, max_results
     return papers
 
 
-def tranlate_to_japanese_with_ollama(text: str, model="gemma2"):
+def tranlate_to_japanese_with_ollama(text: str, model="gemma3:27b"):
     """
     ollamaを使用して日本語に翻訳する関数
 
@@ -104,7 +104,7 @@ def tranlate_to_japanese_with_ollama(text: str, model="gemma2"):
             "content": f"以下を日本語に翻訳して。\n\n{text}"
         }
     ])
-    return abs["message"]["content"]
+    return abs["message"]["content"].strip()
 
 
 # Notion APIにデータを送信する関数
