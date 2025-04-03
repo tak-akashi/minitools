@@ -9,7 +9,9 @@ import pandas as pd
 import pytz
 import argparse
 import logging
+from dotenv import load_dotenv
 
+load_dotenv()
 
 print(os.path.dirname(__file__))
 
