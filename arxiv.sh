@@ -5,4 +5,4 @@ if [ -f .env ]; then
 fi
 
 # Run the Python script using Poetry
-poetry run python src/get_arxiv_summary_in_japanese.py
+uv run script/get_arxiv_summary_in_japanese.py
