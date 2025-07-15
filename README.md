@@ -1,40 +1,41 @@
 # arXiv論文要約ツール（get_arxiv_summary_in_japanese.py）
 
-このツールは、arXivから指定したキーワードで論文を検索し、その要約を日本語に翻訳してNotionデータベースに保存するPythonスクリプトです。
+このツールは、arXivから指定したキーワードで論文を検索し、その要約を日本語に翻訳してNotionデータベースに保存し、結果をSlackに通知するPythonスクリプトです。
 
 ## 主な機能
 
 1. arXiv APIを使用して論文を検索
 2. 論文の要約を日本語に翻訳（ollamaを使用）
 3. 翻訳した要約をNotionデータベースに保存
-4. オプションでCSVファイルにも保存可能
+4. 処理結果をSlackに通知
 
 ## 使い方
 
 1. 必要な環境変数を設定:
    - `NOTION_API_KEY`: NotionのAPIキー
    - `NOTION_DB_ID`: 保存先のNotionデータベースID
+   - `SLACK_WEBHOOK_URL`: SlackのWebhook URL
 
 2. 必要なライブラリをインストール:
    ```
-   pip install requests feedparser ollama pandas pytz
+   pip install requests feedparser ollama python-dotenv pytz
    ```
 
 3. スクリプトを実行:
    ```
-   python get_arxiv_summary_in_japanese.py [オプション]
+   python script/get_arxiv_summary_in_japanese.py [オプション]
    ```
 
    オプション:
-   - `-q`, `--queries`: 検索キーワード（デフォルト: ["LLM", "(RAG OR FINETUNING)"]）
+   - `-q`, `--queries`: 検索キーワード（デフォルト: ["LLM", "(RAG OR FINETUNING OR AGENT)"]）
    - `-d`, `--days_before`: 何日前から検索するか（デフォルト: 1）
-   - `-b`, `--base_date`: 検索終了日（デフォルト: 今日）
+   - `-b`, `--base_date`: 検索終了日（デフォルト: 昨日）
    - `-r`, `--max_results`: 最大検索結果数（デフォルト: 50）
-   - `-c`, `--save_to_csv`: CSVファイルに保存するかどうか（フラグオプション）
+   - `--no-slack`: Slackへの投稿をスキップ（フラグオプション）
 
 4. 結果の確認:
    - Notionデータベースに保存された論文情報を確認
-   - CSVファイルを指定した場合は `outputs` ディレクトリ内のファイルを確認
+   - Slackに送信された通知を確認
 
 ## 注意事項
 
