@@ -92,3 +92,54 @@
 - ollamaを使用して要約と翻訳を行うため、事前にollamaのセットアップが必要です
 - 処理の進行状況はログファイル（`outputs/logs/youtube.log`）で確認できます
 - このスクリプトはApple Silicon搭載のMac上で動作することを前提としています。他の環境で使用する場合は、MLXフレームワークの代替を検討する必要があります。
+
+
+
+# Gmailからメールを抽出して日本語要約してNotionへ書き出すツール（medium_daily_digest_to_notion.py）
+
+このツールは、Gmail経由で受信したMedium Daily Digestメールから記事情報を抽出し、日本語の要約を付けてNotionデータベースに保存するPythonスクリリプトです。
+
+## 主な機能
+
+1.  **Gmail API連携**: 特定の日付のMedium Daily Digestメールを自動で検索・取得します。
+2.  **記事情報抽出**: メールのHTMLコンテンツを解析し、各記事のタイトル、URL、著者名を抽出します。
+3.  **翻訳と要約**: Ollamaを利用して、記事のタイトルと本文を日本語に翻訳・要約します。
+4.  **Notionへの保存**: 処理した記事情報を指定したNotionデータベースに保存します。重複チェック機能も備えています。
+
+## 使い方
+
+1.  **Gmail APIの準備**:
+    - Google Cloud PlatformでGmail APIを有効にし、認証情報（`credentials.json`）をダウンロードしてプロジェクトのルートディレクトリに配置します。
+    - 初回実行時にブラウザで認証が求められます。認証後、`token.pickle`が生成され、以降の実行では自動で認証されます。
+
+2.  **必要な環境変数を設定**:
+    - `.env`ファイルを作成し、以下の変数を設定します。
+      ```
+      NOTION_API_KEY="your_notion_api_key"
+      NOTION_DB_ID_DAILY_DIGEST="your_notion_database_id"
+      # GMAIL_CREDENTIALS_PATH="path/to/your/credentials.json" # オプション
+      ```
+
+3.  **必要なライブラリをインストール**:
+    ```bash
+    pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests beautifulsoup4 notion-client ollama python-dotenv
+    ```
+
+4.  **スクリプトを実行**:
+    - 今日のダイジェストを処理する場合:
+      ```bash
+      python script/medium_daily_digest_to_notion.py
+      ```
+    - 特定の日付のダイジェストを処理する場合:
+      ```bash
+      python script/medium_daily_digest_to_notion.py --date YYYY-MM-DD
+      ```
+
+5.  **結果の確認**:
+    - 指定したNotionデータベースに記事が保存されていることを確認します。
+
+## 注意事項
+
+-   Ollamaがローカル環境で起動している必要があります。
+-   Gmail APIの認証情報(`credentials.json`)が必要です。
+-   Notionデータベースには、`Title`(Title), `Japanese Title`(Rich Text), `URL`(URL), `Author`(Rich Text), `Summary`(Rich Text), `Date`(Date) のプロパティが正しく設定されている必要があります。
