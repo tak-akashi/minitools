@@ -9,11 +9,12 @@ import pickle
 import base64
 import re
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 import json
 from dataclasses import dataclass
 from urllib.parse import urlparse
+import pytz
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -97,16 +98,28 @@ class MediumDigestProcessor:
         if date is None:
             date = datetime.now()
         
-        # 指定された日付の開始と終了を計算
-        start_date = date.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_date = start_date + timedelta(days=1)
+        # JSTタイムゾーンを設定
+        jst = pytz.timezone('Asia/Tokyo')
         
-        # Gmail APIの日付形式に変換 (YYYY/MM/DD)
-        start_str = start_date.strftime('%Y/%m/%d')
-        end_str = end_date.strftime('%Y/%m/%d')
+        # dateがnaiveの場合はJSTとして扱う
+        if date.tzinfo is None:
+            date = jst.localize(date)
         
-        # 差出人と日付範囲で検索
-        query = f'from:noreply@medium.com after:{start_str} before:{end_str}'
+        # 指定された日付の開始と終了を計算（JST）
+        start_date_jst = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date_jst = start_date_jst + timedelta(days=1)
+        
+        # Unix タイムスタンプに変換（これによりタイムゾーンの問題を回避）
+        start_timestamp = int(start_date_jst.timestamp())
+        end_timestamp = int(end_date_jst.timestamp())
+        
+        # デバッグ情報を出力
+        print(f"検索期間 (JST): {start_date_jst} から {end_date_jst}")
+        print(f"タイムスタンプ: {start_timestamp} から {end_timestamp}")
+        
+        # 差出人とタイムスタンプ範囲で検索
+        query = f'from:noreply@medium.com after:{start_timestamp} before:{end_timestamp}'
+        print(f"Gmail検索クエリ: {query}")
         
         try:
             response = self.gmail_service.users().threads().list(
@@ -128,6 +141,13 @@ class MediumDigestProcessor:
             # スレッド内の最新メッセージを返す
             messages = thread.get('messages', [])
             if messages:
+                # メッセージの受信時刻も確認（デバッグ用）
+                msg = messages[-1]
+                if 'internalDate' in msg:
+                    received_timestamp = int(msg['internalDate']) / 1000
+                    received_date = datetime.fromtimestamp(received_timestamp, tz=jst)
+                    print(f"メール受信日時 (JST): {received_date}")
+                
                 return [messages[-1]] # 最新のメッセージのみをリストで返す
             return []
 
