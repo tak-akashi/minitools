@@ -12,6 +12,8 @@ import re
 import argparse
 import asyncio
 import aiohttp
+import logging
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 import json
@@ -44,6 +46,29 @@ MAX_CONCURRENT_ARTICLES = 10  # 同時に処理する記事の最大数
 MAX_CONCURRENT_OLLAMA = 3     # Ollama APIへの同時リクエスト数
 MAX_CONCURRENT_NOTION = 3     # Notion APIへの同時リクエスト数
 MAX_CONCURRENT_HTTP = 10      # HTTPリクエストの同時接続数
+
+def setup_logger() -> logging.Logger:
+    """ロガーの設定"""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # コンソールハンドラ
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    # ファイルハンドラ
+    log_dir = Path("outputs/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(log_dir / "medium_daily_digest.log", mode="a")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    return logger
+
+logger = setup_logger()
 
 @dataclass
 class Article:
@@ -127,7 +152,7 @@ class MediumDigestProcessorAsync:
             
             return build('gmail', 'v1', credentials=creds)
         except Exception as e:
-            print(f"Gmail認証エラー: {e}")
+            logger.error(f"Gmail認証エラー: {e}")
             raise
     
     def get_medium_digest_emails(self, date: Optional[datetime] = None) -> List[Dict]:
@@ -151,12 +176,12 @@ class MediumDigestProcessorAsync:
         end_timestamp = int(end_date_jst.timestamp())
         
         # デバッグ情報を出力
-        print(f"検索期間 (JST): {start_date_jst} から {end_date_jst}")
-        print(f"タイムスタンプ: {start_timestamp} から {end_timestamp}")
+        logger.info(f"検索期間 (JST): {start_date_jst} から {end_date_jst}")
+        logger.info(f"タイムスタンプ: {start_timestamp} から {end_timestamp}")
         
         # 差出人とタイムスタンプ範囲で検索
         query = f'from:noreply@medium.com after:{start_timestamp} before:{end_timestamp}'
-        print(f"Gmail検索クエリ: {query}")
+        logger.info(f"Gmail検索クエリ: {query}")
         
         try:
             response = self.gmail_service.users().threads().list(
@@ -183,13 +208,13 @@ class MediumDigestProcessorAsync:
                 if 'internalDate' in msg:
                     received_timestamp = int(msg['internalDate']) / 1000
                     received_date = datetime.fromtimestamp(received_timestamp, tz=jst)
-                    print(f"メール受信日時 (JST): {received_date}")
+                    logger.info(f"メール受信日時 (JST): {received_date}")
                 
                 return [messages[-1]] # 最新のメッセージのみをリストで返す
             return []
 
         except HttpError as error:
-            print(f'Gmail APIエラー: {error}')
+            logger.error(f'Gmail APIエラー: {error}')
             return []
     
     def get_email_content(self, message_id: str) -> str:
@@ -206,7 +231,7 @@ class MediumDigestProcessorAsync:
             return body
         
         except HttpError as error:
-            print(f'メール取得エラー: {error}')
+            logger.error(f'メール取得エラー: {error}')
             return ""
     
     def _extract_body_from_payload(self, payload: Dict) -> str:
@@ -297,13 +322,13 @@ class MediumDigestProcessorAsync:
             except aiohttp.ClientError as e:
                 if attempt < retry_count - 1:
                     wait_time = (attempt + 1) * 2  # 指数バックオフ
-                    print(f"記事取得エラー ({url}): {e}. {wait_time}秒後にリトライ...")
+                    logger.warning(f"記事取得エラー ({url}): {e}. {wait_time}秒後にリトライ...")
                     await asyncio.sleep(wait_time)
                 else:
-                    print(f"記事取得エラー ({url}): {e}. リトライ回数を超えました")
+                    logger.error(f"記事取得エラー ({url}): {e}. リトライ回数を超えました")
                     return "", None
             except Exception as e:
-                print(f"予期しないエラー ({url}): {e}")
+                logger.error(f"予期しないエラー ({url}): {e}")
                 return "", None
     
     async def generate_japanese_translation_and_summary_async(self, article: Article):
@@ -359,7 +384,7 @@ Example:
                 article.japanese_summary = result.get('japanese_summary', "要約失敗")
 
         except Exception as e:
-            print(f"翻訳・要約生成エラー ({article.title}): {e}")
+            logger.error(f"翻訳・要約生成エラー ({article.title}): {e}")
             article.japanese_title = "翻訳失敗"
             article.japanese_summary = "要約の生成に失敗しました"
     
@@ -381,7 +406,7 @@ Example:
     async def send_to_slack_async(self, message: str) -> bool:
         """Slackに非同期で投稿"""
         if not SLACK_WEBHOOK_URL:
-            print("SLACK_WEBHOOK_URL環境変数が設定されていません")
+            logger.error("SLACK_WEBHOOK_URL環境変数が設定されていません")
             return False
         
         payload = {"text": message}
@@ -389,13 +414,13 @@ Example:
         try:
             async with self.http_session.post(SLACK_WEBHOOK_URL, json=payload) as response:
                 if response.status == 200:
-                    print("Slackへの送信が完了しました")
+                    logger.info("Slackへの送信が完了しました")
                     return True
                 else:
-                    print(f"Slackへの送信に失敗しました。ステータスコード: {response.status}")
+                    logger.error(f"Slackへの送信に失敗しました。ステータスコード: {response.status}")
                     return False
         except Exception as e:
-            print(f"Slackへの送信エラー: {e}")
+            logger.error(f"Slackへの送信エラー: {e}")
             return False
     
     async def save_to_notion_async(self, article: Article, target_date: datetime, retry_count: int = 3):
@@ -425,7 +450,7 @@ Example:
                     )
 
                     if existing['results']:
-                        print(f"  -> 既に存在するためスキップ: {article.title}")
+                        logger.info(f"  -> 既に存在するためスキップ: {article.title}")
                         return
 
                     # 新規ページ作成
@@ -483,16 +508,16 @@ Example:
                         )
                     )
 
-                    print(f"  -> 保存完了: {article.title}")
+                    logger.info(f"  -> 保存完了: {article.title}")
                     return  # 成功したら終了
 
                 except Exception as e:
                     if attempt < retry_count - 1:
                         wait_time = (attempt + 1) * 2  # 指数バックオフ
-                        print(f"  -> Notion保存エラー ({article.title}): {e}. {wait_time}秒後にリトライ...")
+                        logger.warning(f"  -> Notion保存エラー ({article.title}): {e}. {wait_time}秒後にリトライ...")
                         await asyncio.sleep(wait_time)
                     else:
-                        print(f"  -> Notion保存エラー ({article.title}): {e}. リトライ回数を超えました")
+                        logger.error(f"  -> Notion保存エラー ({article.title}): {e}. リトライ回数を超えました")
                         raise
     
     async def process_article_async(self, article: Article, target_date: datetime, save_notion: bool) -> Article:
@@ -509,7 +534,7 @@ Example:
     async def process_daily_digest_async(self, target_date: datetime, save_notion: bool = True, send_slack: bool = True):
         """デイリーダイジェストの処理メイン関数"""
         date_str = target_date.strftime('%Y-%m-%d')
-        print(f"Medium Daily Digest ({date_str}) の処理を開始します...")
+        logger.info(f"Medium Daily Digest ({date_str}) の処理を開始します...")
 
         # Slack送信が有効な場合、環境変数をチェック
         if send_slack and not SLACK_WEBHOOK_URL:
@@ -519,7 +544,7 @@ Example:
         messages = self.get_medium_digest_emails(target_date)
 
         if not messages:
-            print(f"{date_str} のDaily Digestメールが見つかりません")
+            logger.warning(f"{date_str} のDaily Digestメールが見つかりません")
             return
 
         # メール本文を取得
@@ -527,24 +552,24 @@ Example:
         email_content = self.get_email_content(message_id)
 
         if not email_content:
-            print("メール本文の取得に失敗しました")
+            logger.error("メール本文の取得に失敗しました")
             return
 
         # 記事情報を抽出
         articles = self.parse_articles_from_email(email_content)
-        print(f"{len(articles)}件の記事を検出しました")
+        logger.info(f"{len(articles)}件の記事を検出しました")
 
         if not articles:
             return
 
         # 記事を並列処理で処理
-        print(f"最大{MAX_CONCURRENT_ARTICLES}件の記事を並列処理します...")
+        logger.info(f"最大{MAX_CONCURRENT_ARTICLES}件の記事を並列処理します...")
         
         # 記事をバッチに分割して処理
         processed_articles = []
         for i in range(0, len(articles), MAX_CONCURRENT_ARTICLES):
             batch = articles[i:i + MAX_CONCURRENT_ARTICLES]
-            print(f"バッチ {i//MAX_CONCURRENT_ARTICLES + 1}/{(len(articles) + MAX_CONCURRENT_ARTICLES - 1)//MAX_CONCURRENT_ARTICLES} を処理中...")
+            logger.info(f"バッチ {i//MAX_CONCURRENT_ARTICLES + 1}/{(len(articles) + MAX_CONCURRENT_ARTICLES - 1)//MAX_CONCURRENT_ARTICLES} を処理中...")
             
             # バッチ内の記事を並列処理
             tasks = [
@@ -557,7 +582,7 @@ Example:
             # エラーをチェックして成功した記事のみを追加
             for idx, result in enumerate(batch_results):
                 if isinstance(result, Exception):
-                    print(f"記事処理エラー: {batch[idx].title} - {result}")
+                    logger.error(f"記事処理エラー: {batch[idx].title} - {result}")
                 else:
                     processed_articles.append(result)
 
@@ -566,7 +591,7 @@ Example:
             slack_message = self.format_slack_message(processed_articles, date_str)
             await self.send_to_slack_async(slack_message)
 
-        print(f"処理が完了しました（{len(processed_articles)}/{len(articles)}件成功）")
+        logger.info(f"処理が完了しました（{len(processed_articles)}/{len(articles)}件成功）")
 
 
 async def main_async():
@@ -601,7 +626,7 @@ async def main_async():
         try:
             target_date = datetime.strptime(args.date, '%Y-%m-%d')
         except ValueError:
-            print(f"エラー: 日付は YYYY-MM-DD 形式で指定してください (例: 2024-01-15)")
+            logger.error(f"エラー: 日付は YYYY-MM-DD 形式で指定してください (例: 2024-01-15)")
             return
     else:
         target_date = datetime.now()
@@ -624,7 +649,7 @@ async def main_async():
         async with MediumDigestProcessorAsync() as processor:
             await processor.process_daily_digest_async(target_date, save_notion=save_notion, send_slack=send_slack)
     except Exception as e:
-        print(f"エラーが発生しました: {e}")
+        logger.error(f"エラーが発生しました: {e}")
         raise
 
 
