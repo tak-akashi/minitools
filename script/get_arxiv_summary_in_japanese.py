@@ -190,6 +190,51 @@ class ArxivProcessorAsync:
                 logger.error(f"要約生成エラー: {e}")
                 return f"{title}の要約生成に失敗しました"
 
+    async def check_url_exists_in_notion(self, url: str) -> bool:
+        """
+        NotionデータベースにURLが既に存在するかチェック
+        
+        Args:
+            url: チェックするURL
+            
+        Returns:
+            URLが存在する場合True
+        """
+        if not NOTION_API_KEY or not DATABASE_ID:
+            logger.error("Notion API key or Database ID not set")
+            return False
+            
+        try:
+            query_url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
+            headers = {
+                "Authorization": f"Bearer {NOTION_API_KEY}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28"
+            }
+            
+            # URLプロパティでフィルタリング
+            query_data = {
+                "filter": {
+                    "property": "URL",
+                    "url": {
+                        "equals": url
+                    }
+                }
+            }
+            
+            async with self.http_session.post(query_url, headers=headers, json=query_data) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # 結果が1件以上あればURLは既に存在
+                    return len(data.get("results", [])) > 0
+                else:
+                    logger.warning(f"Failed to query Notion database. Status: {response.status}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error checking URL existence in Notion: {e}")
+            return False
+
     async def add_to_notion_async(
         self,
         title: str,
@@ -209,6 +254,12 @@ class ArxivProcessorAsync:
         if not NOTION_API_KEY or not DATABASE_ID:
             logger.error("Notion API key or Database ID not set")
             return True
+        
+        # 重複チェック
+        url_exists = await self.check_url_exists_in_notion(url)
+        if url_exists:
+            logger.info(f"URL already exists in Notion: {url}")
+            return False  # エラーではないのでFalseを返す
         
         async with self.notion_semaphore:
             for attempt in range(retry_count):
@@ -279,6 +330,14 @@ class ArxivProcessorAsync:
         logger.info(f"Processing {paper['title']} ({index + 1}/{total})")
         
         try:
+            # 重複チェック（翻訳前に実行して処理時間を節約）
+            url_exists = await self.check_url_exists_in_notion(paper['pdf_url'])
+            if url_exists:
+                logger.info(f"Skipping duplicate paper: {paper['title']}")
+                processed_paper = paper.copy()
+                processed_paper['translated_summary'] = "既にNotionに存在します"
+                return False, processed_paper
+            
             # 日本語に翻訳
             translated_summary = await self.translate_to_japanese_async(paper["summary"])
             
