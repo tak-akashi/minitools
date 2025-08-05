@@ -13,6 +13,8 @@ import argparse
 import asyncio
 import aiohttp
 import logging
+import signal
+import socket
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
@@ -26,6 +28,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import httplib2
 
 import requests
 from bs4 import BeautifulSoup
@@ -117,7 +120,7 @@ class MediumDigestProcessorAsync:
     async def __aenter__(self):
         """非同期コンテキストマネージャーのエントリー"""
         connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_HTTP)
-        timeout = aiohttp.ClientTimeout(total=60)
+        timeout = aiohttp.ClientTimeout(total=60, connect=30, sock_connect=30, sock_read=30)
         self.http_session = aiohttp.ClientSession(connector=connector, timeout=timeout)
         return self
     
@@ -155,7 +158,7 @@ class MediumDigestProcessorAsync:
             logger.error(f"Gmail認証エラー: {e}")
             raise
     
-    def get_medium_digest_emails(self, date: Optional[datetime] = None) -> List[Dict]:
+    async def get_medium_digest_emails_async(self, date: Optional[datetime] = None) -> List[Dict]:
         """Medium Daily Digestメールをスレッドから取得"""
         if date is None:
             date = datetime.now()
@@ -184,21 +187,39 @@ class MediumDigestProcessorAsync:
         logger.info(f"Gmail検索クエリ: {query}")
         
         try:
-            response = self.gmail_service.users().threads().list(
-                userId='me',
-                q=query,
-                maxResults=1
-            ).execute()
+            # Gmail APIの呼び出しを非同期で実行
+            loop = asyncio.get_event_loop()
+            
+            # DNS解決エラーの詳細情報を追加
+            try:
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.gmail_service.users().threads().list(
+                        userId='me',
+                        q=query,
+                        maxResults=1
+                    ).execute()
+                )
+            except socket.gaierror as e:
+                logger.error(f"DNS解決エラー: {e}")
+                logger.error("ネットワーク接続を確認してください。")
+                raise
+            except Exception as e:
+                logger.error(f"Gmail API呼び出しエラー: {e}")
+                raise
 
             threads = response.get('threads', [])
             if not threads:
                 return []
 
             thread_id = threads[0]['id']
-            thread = self.gmail_service.users().threads().get(
-                userId='me',
-                id=thread_id
-            ).execute()
+            thread = await loop.run_in_executor(
+                None,
+                lambda: self.gmail_service.users().threads().get(
+                    userId='me',
+                    id=thread_id
+                ).execute()
+            )
             
             # スレッド内の最新メッセージを返す
             messages = thread.get('messages', [])
@@ -217,13 +238,18 @@ class MediumDigestProcessorAsync:
             logger.error(f'Gmail APIエラー: {error}')
             return []
     
-    def get_email_content(self, message_id: str) -> str:
+    async def get_email_content_async(self, message_id: str) -> str:
         """メールの本文を取得"""
         try:
-            message = self.gmail_service.users().messages().get(
-                userId='me',
-                id=message_id
-            ).execute()
+            # Gmail APIの呼び出しを非同期で実行
+            loop = asyncio.get_event_loop()
+            message = await loop.run_in_executor(
+                None,
+                lambda: self.gmail_service.users().messages().get(
+                    userId='me',
+                    id=message_id
+                ).execute()
+            )
             
             payload = message['payload']
             body = self._extract_body_from_payload(payload)
@@ -541,7 +567,7 @@ Example:
             raise ValueError("SLACK_WEBHOOK_URL_MEDIUM_DAILY_DIGEST環境変数が設定されていません。Slack送信を行う場合は設定してください。")
 
         # 指定された日付のメールを取得
-        messages = self.get_medium_digest_emails(target_date)
+        messages = await self.get_medium_digest_emails_async(target_date)
 
         if not messages:
             logger.warning(f"{date_str} のDaily Digestメールが見つかりません")
@@ -549,7 +575,7 @@ Example:
 
         # メール本文を取得
         message_id = messages[0]['id']
-        email_content = self.get_email_content(message_id)
+        email_content = await self.get_email_content_async(message_id)
 
         if not email_content:
             logger.error("メール本文の取得に失敗しました")
@@ -577,7 +603,16 @@ Example:
                 for article in batch
             ]
             
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            # タスクを追跡
+            for task in tasks:
+                _running_tasks.add(task)
+            
+            try:
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            finally:
+                # 完了したタスクを削除
+                for task in tasks:
+                    _running_tasks.discard(task)
             
             # エラーをチェックして成功した記事のみを追加
             for idx, result in enumerate(batch_results):
@@ -593,6 +628,19 @@ Example:
 
         logger.info(f"処理が完了しました（{len(processed_articles)}/{len(articles)}件成功）")
 
+
+# グローバル変数でタスクを管理
+_running_tasks = set()
+
+def signal_handler(signum, frame):
+    """シグナルハンドラー（Ctrl+C対応）"""
+    logger.info("\n処理を中断しています...")
+    # 実行中のタスクをキャンセル
+    for task in _running_tasks:
+        task.cancel()
+    # イベントループを停止
+    loop = asyncio.get_event_loop()
+    loop.stop()
 
 async def main_async():
     """メイン実行関数"""
@@ -648,14 +696,34 @@ async def main_async():
     try:
         async with MediumDigestProcessorAsync() as processor:
             await processor.process_daily_digest_async(target_date, save_notion=save_notion, send_slack=send_slack)
+    except asyncio.CancelledError:
+        logger.info("処理がキャンセルされました")
+        raise
+    except socket.gaierror as e:
+        logger.error(f"ネットワーク接続エラー: {e}")
+        logger.error("ネットワーク接続を確認して、再度実行してください。")
+        logger.error("DNS設定に問題がある可能性があります。")
+        raise
     except Exception as e:
         logger.error(f"エラーが発生しました: {e}")
+        logger.error(f"エラーの詳細: {type(e).__name__}")
+        import traceback
+        logger.error(f"スタックトレース: {traceback.format_exc()}")
         raise
 
 
 def main():
     """同期的なエントリーポイント"""
-    asyncio.run(main_async())
+    # シグナルハンドラーを設定
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    try:
+        asyncio.run(main_async())
+    except KeyboardInterrupt:
+        logger.info("\n処理が中断されました")
+    except Exception as e:
+        logger.error(f"予期しないエラー: {e}")
+        raise
 
 
 if __name__ == "__main__":
