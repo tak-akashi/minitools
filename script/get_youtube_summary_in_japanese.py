@@ -1,27 +1,19 @@
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import yt_dlp
 import mlx_whisper
-import os
 import ollama
 import argparse
-import logging
+from utils.logger import setup_logger
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# コンソールハンドラの作成
-console_handler = logging.StreamHandler()
-
-# フォーマッタの作成とハンドラへの設定
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-# ロガーにハンドラを追加
-logger.addHandler(console_handler)
-
-# ファイルハンドラの作成
-file_handler = logging.FileHandler("outputs/logs/youtube.log", mode="a")
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+# ロガーの設定
+logger = setup_logger(
+    name=__name__,
+    log_file="youtube.log"
+)
 
 
 # YouTubeから音声データを取得し、特定のフォルダにダウンロード

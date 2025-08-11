@@ -8,11 +8,13 @@ Gmail経由でGoogle Alertsメールを取得し、各アラートの内容を�
 """
 
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pickle
 import base64
 import re
 import argparse
-import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -33,6 +35,7 @@ from bs4 import BeautifulSoup
 from notion_client import Client
 import ollama
 from dotenv import load_dotenv
+from utils.logger import setup_logger
 
 load_dotenv()
 
@@ -42,28 +45,11 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 # Slack設定
 SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL_GOOGLE_ALERTS')
 
-def setup_logger() -> logging.Logger:
-    """ロガーの設定"""
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # コンソールハンドラ
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    # ファイルハンドラ
-    log_dir = Path("outputs/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(log_dir / "google_alerts.log", mode="a")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    return logger
-
-logger = setup_logger()
+# ロガーの設定
+logger = setup_logger(
+    name=__name__,
+    log_file="google_alerts.log"
+)
 
 @dataclass
 class Alert:

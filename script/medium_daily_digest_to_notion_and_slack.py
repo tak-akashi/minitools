@@ -6,13 +6,15 @@ Gmail経由でMedium Daily Digestメールを取得し、記事情報を抽出�
 """
 
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pickle
 import base64
 import re
 import argparse
 import asyncio
 import aiohttp
-import logging
 import signal
 import socket
 from pathlib import Path
@@ -35,6 +37,7 @@ from bs4 import BeautifulSoup
 from notion_client import Client
 import ollama
 from dotenv import load_dotenv
+from utils.logger import setup_logger
 
 load_dotenv()
 
@@ -50,28 +53,11 @@ MAX_CONCURRENT_OLLAMA = 3     # Ollama APIへの同時リクエスト数
 MAX_CONCURRENT_NOTION = 3     # Notion APIへの同時リクエスト数
 MAX_CONCURRENT_HTTP = 10      # HTTPリクエストの同時接続数
 
-def setup_logger() -> logging.Logger:
-    """ロガーの設定"""
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # コンソールハンドラ
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    # ファイルハンドラ
-    log_dir = Path("outputs/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(log_dir / "medium_daily_digest.log", mode="a")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    return logger
-
-logger = setup_logger()
+# ロガーの設定
+logger = setup_logger(
+    name=__name__,
+    log_file="medium_daily_digest.log"
+)
 
 @dataclass
 class Article:

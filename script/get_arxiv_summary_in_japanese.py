@@ -6,6 +6,9 @@ arXivから指定したキーワードで論文を検索し、その要約を日
 """
 
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 import feedparser
 import ollama
@@ -15,9 +18,9 @@ from typing import List, Dict, Tuple, Optional
 from datetime import datetime, timedelta
 import pytz
 import argparse
-import logging
 from pathlib import Path
 from dotenv import load_dotenv
+from utils.logger import setup_logger
 
 load_dotenv()
 
@@ -26,28 +29,11 @@ MAX_CONCURRENT_PAPERS = 10    # 同時に処理する論文の最大数
 MAX_CONCURRENT_OLLAMA = 5     # Ollama APIへの同時リクエスト数
 MAX_CONCURRENT_NOTION = 3     # Notion APIへの同時リクエスト数
 
-def setup_logger() -> logging.Logger:
-    """ロガーの設定"""
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # コンソールハンドラ
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    # ファイルハンドラ
-    log_dir = Path("outputs/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(log_dir / "arxiv.log", mode="a")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    return logger
-
-logger = setup_logger()
+# ロガーの設定
+logger = setup_logger(
+    name=__name__,
+    log_file="arxiv.log"
+)
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
 DATABASE_ID = os.getenv("NOTION_DB_ID")
