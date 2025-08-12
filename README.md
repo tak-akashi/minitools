@@ -471,11 +471,3 @@ uv sync --extra whisper  # YouTube要約機能
 ## ライセンス
 
 MIT License
-
-## 貢献
-
-プルリクエストを歓迎します。大きな変更の場合は、まずissueを開いて変更内容について議論してください。
-
-## サポート
-
-問題が発生した場合は、[Issues](https://github.com/yourusername/minitools/issues)でお知らせください。
