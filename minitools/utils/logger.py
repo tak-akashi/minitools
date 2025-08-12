@@ -50,12 +50,24 @@ class ColoredFormatter(logging.Formatter):
     
     def format(self, record: logging.LogRecord) -> str:
         """ログレコードをフォーマット（カラー付き）"""
+        # まず基本フォーマットを適用
         formatted = super().format(record)
         
-        if self.use_colors and record.levelname in self.COLORS:
-            # ログレベル部分だけに色を付ける
-            levelname_color = self.COLORS[record.levelname] + record.levelname + self.RESET
-            formatted = formatted.replace(record.levelname, levelname_color)
+        # timestamp と name: message の間に [LEVEL] を挿入
+        # formatted は "timestamp name: message" の形式
+        parts = formatted.split(' ', 2)  # 最初の2つのスペースで分割
+        if len(parts) >= 3:
+            timestamp = parts[0] + ' ' + parts[1]  # YYYY-MM-DD HH:MM:SS
+            rest = parts[2]  # name: message
+            
+            if self.use_colors and record.levelname in self.COLORS:
+                # [色付きLEVEL] を挿入
+                level_str = f"[{self.COLORS[record.levelname]}{record.levelname:<7}{self.RESET}]"
+            else:
+                # カラーなしの場合も[LEVEL]を挿入
+                level_str = f"[{record.levelname:<7}]"
+            
+            formatted = f"{timestamp} {level_str} {rest}"
         
         return formatted
 
@@ -90,7 +102,7 @@ def setup_logger(
     logger.handlers = []
     
     # フォーマットの定義
-    format_string = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format_string = '%(asctime)s %(name)s: %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
     
     # コンソールハンドラの設定

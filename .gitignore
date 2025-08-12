@@ -604,6 +604,9 @@ celerybeat.pid
 # Environments
 .env
 .venv
+# Settings (user-specific, but not secrets)
+settings.yaml
+settings.yml
 env/
 venv/
 ENV/

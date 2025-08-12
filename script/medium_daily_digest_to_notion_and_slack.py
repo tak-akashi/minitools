@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup
 from notion_client import Client
 import ollama
 from dotenv import load_dotenv
-from utils.logger import setup_logger
+from minitools.utils.logger import setup_logger
 
 load_dotenv()
 

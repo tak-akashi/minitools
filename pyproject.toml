@@ -1,7 +1,7 @@
 [project]
 name = "minitools"
 version = "0.1.0"
-description = "Add your description here"
+description = "A collection of automation tools for content aggregation and processing"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,5 +15,31 @@ dependencies = [
     "ollama>=0.5.1",
     "pandas>=2.3.0",
     "python-dotenv>=1.1.0",
+    "pyyaml>=6.0",
     "requests>=2.32.4",
+    "pytz>=2024.1",
+    "yt-dlp>=2024.1.0",
+    "brotli>=1.1.0",
 ]
+
+[project.optional-dependencies]
+whisper = [
+    "scipy==1.14.1",
+    "mlx-whisper>=0.1.0",
+]
+
+[project.scripts]
+minitools-arxiv = "scripts.arxiv:main"
+minitools-medium = "scripts.medium:main"
+minitools-google-alerts = "scripts.google_alerts:main"
+minitools-youtube = "scripts.youtube:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["minitools", "scripts"]
+
+[tool.uv]
+package = true

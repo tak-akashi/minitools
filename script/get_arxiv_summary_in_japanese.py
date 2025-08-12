@@ -20,7 +20,7 @@ import pytz
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv
-from utils.logger import setup_logger
+from minitools.utils.logger import setup_logger
 
 load_dotenv()
 

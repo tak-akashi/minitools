@@ -1,0 +1,123 @@
+# Minitools 設定ファイル
+# このファイルを settings.yaml にコピーして使用してください
+# セキュリティ関連の設定（APIキー等）は .env ファイルに記載してください
+
+# ========================================
+# Ollamaモデル設定
+# ========================================
+models:
+  # ArXiv論文、Google Alerts、Medium記事の翻訳・要約用
+  # 高精度な処理が必要な場合は gemma3:27b を推奨
+  translation: "gemma3:27b"
+  summarization: "gemma3:27b"
+  
+  # YouTube動画の要約用（より軽量なモデル）
+  youtube_summary: "gemma2"
+
+# ========================================
+# 処理設定
+# ========================================
+processing:
+  # 並列処理の最大数
+  max_concurrent_articles: 10      # 同時に処理する記事の最大数
+  max_concurrent_ollama: 3         # Ollama APIへの同時リクエスト数
+  max_concurrent_notion: 3         # Notion APIへの同時リクエスト数
+  max_concurrent_http: 10          # HTTPリクエストの同時接続数
+  
+  # リトライ設定
+  retry_count: 3                   # リトライ回数
+  retry_delay: 2                   # リトライ間隔（秒）
+
+# ========================================
+# 各ツールのデフォルト設定
+# ========================================
+defaults:
+  # ArXiv論文検索
+  arxiv:
+    # デフォルトの検索キーワード
+    keywords:
+      - "LLM"
+      - "(RAG OR FINETUNING OR AGENT)"
+    days_before: 1                 # 何日前から検索するか
+    max_results: 50                # 最大検索結果数
+    
+  # Google Alerts
+  google_alerts:
+    hours_back: 6                  # 過去何時間分のメールを取得するか
+    max_alerts_per_message: 12     # Slackメッセージあたりの最大アラート数
+    
+  # Medium Daily Digest
+  medium:
+    fetch_today: true              # 今日のダイジェストを取得
+    
+  # YouTube要約
+  youtube:
+    output_dir: "outputs"          # 出力ディレクトリ
+    whisper_model: "mlx-community/whisper-large-v3-turbo"  # Whisperモデル
+    audio_quality: "192"           # 音声品質（kbps）
+    temp_dir: "outputs/temp"       # 一時ファイルディレクトリ
+
+# ========================================
+# ログ設定
+# ========================================
+logging:
+  level: "INFO"                    # ログレベル: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  colored: true                    # カラー出力の有効/無効
+  log_dir: "outputs/logs"          # ログファイルの保存先
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# ========================================
+# Gmail設定
+# ========================================
+gmail:
+  credentials_file: "credentials.json"  # 認証情報ファイル
+  token_file: "token.pickle"            # トークンファイル
+  scopes:
+    - "https://www.googleapis.com/auth/gmail.readonly"
+
+# ========================================
+# 出力設定
+# ========================================
+output:
+  # ファイル保存設定
+  save_transcripts: true           # 文字起こしを保存
+  save_summaries: true             # 要約を保存
+  
+  # Notion設定
+  notion:
+    batch_size: 10                 # バッチ処理のサイズ
+    properties:
+      title_max_length: 255        # タイトルの最大文字数
+      summary_max_length: 2000     # 要約の最大文字数
+      
+  # Slack設定
+  slack:
+    max_message_length: 3500       # メッセージの最大文字数
+    use_blocks: false              # Slack Blocksフォーマットを使用
+    include_timestamps: true       # タイムスタンプを含める
+
+# ========================================
+# カスタムタグ設定（Google Alerts用）
+# ========================================
+tags:
+  # Google Alertsの件名からタグを抽出するためのマッピング
+  google_alerts:
+    # AI一般
+    - keywords: ["artificial intelligence", "ai technology", "machine learning"]
+      tag: "AI一般"
+    
+    # 生成AI
+    - keywords: ["generative ai", "gen ai", "stable diffusion", "dalle", "sora"]
+      tag: "生成AI"
+    
+    # LLM
+    - keywords: ["llm", "large language model", "gpt", "chatgpt", "claude", "gemini"]
+      tag: "LLM"
+    
+    # AI Startup
+    - keywords: ["ai startup", "ai company", "openai", "anthropic", "midjourney"]
+      tag: "AI Startup"
+    
+    # Deep Learning
+    - keywords: ["deep learning", "neural network", "pytorch", "tensorflow"]
+      tag: "Deep Learning"

@@ -6,7 +6,7 @@ import yt_dlp
 import mlx_whisper
 import ollama
 import argparse
-from utils.logger import setup_logger
+from minitools.utils.logger import setup_logger
 
 
 # ロガーの設定

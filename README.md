@@ -1,251 +1,481 @@
-# arXiv論文要約ツール（get_arxiv_summary_in_japanese.py）
+# Minitools
 
-このツールは、arXivから指定したキーワードで論文を検索し、その要約を日本語に翻訳してNotionデータベースに保存し、結果をSlackに通知するPythonスクリプトです。並列処理により高速化されています。
+コンテンツ収集・処理・配信を自動化するPythonパッケージです。ArXiv論文、Medium記事、Google Alerts、YouTube動画などから情報を収集し、日本語に翻訳・要約してNotionやSlackに配信します。
 
-## 主な機能
+## 特徴
 
-1. arXiv APIを使用して論文を検索
-2. 論文の要約を日本語に翻訳（ollamaを使用）
-3. 翻訳した要約をNotionデータベースに保存
-4. 処理結果をSlackに通知
-5. **並列処理**: 複数の論文を同時に処理し、3-5倍の高速化を実現
+- 📚 **複数のソースに対応**: ArXiv、Medium Daily Digest、Google Alerts、YouTube
+- 🌐 **日本語対応**: Ollamaを使用した高品質な翻訳・要約
+- ⚡ **高速パッケージ管理**: uvによる10-100倍高速な依存関係管理
+- 🚀 **高速並列処理**: 非同期処理により3-5倍の高速化
+- 📝 **Notion連携**: 自動的にデータベースに保存
+- 💬 **Slack通知**: 処理結果をSlackに送信
+- 🎨 **カラフルなログ**: ログレベルに応じた色分け表示
 
-## 使い方
+## プロジェクト構造
 
-1. 必要な環境変数を設定:
-   - `NOTION_API_KEY`: NotionのAPIキー
-   - `NOTION_DB_ID`: 保存先のNotionデータベースID
-   - `SLACK_WEBHOOK_URL`: SlackのWebhook URL
-
-2. 必要なライブラリをインストール:
-   ```
-   pip install requests feedparser ollama python-dotenv pytz aiohttp
-   ```
-
-3. スクリプトを実行:
-   ```
-   python script/get_arxiv_summary_in_japanese.py [オプション]
-   ```
-
-   オプション:
-   - `-q`, `--queries`: 検索キーワード（デフォルト: ["LLM", "(RAG OR FINETUNING OR AGENT)"]）
-   - `-d`, `--days_before`: 何日前から検索するか（デフォルト: 1）
-   - `-b`, `--base_date`: 検索終了日（デフォルト: 昨日）
-   - `-r`, `--max_results`: 最大検索結果数（デフォルト: 50）
-   - `--no-slack`: Slackへの投稿をスキップ（フラグオプション）
-
-4. 結果の確認:
-   - Notionデータベースに保存された論文情報を確認
-   - Slackに送信された通知を確認
-
-## パフォーマンス
-
-- **50論文の処理時間**: 約250秒 → 約60秒（4倍高速化）
-- **同時処理**: 最大10論文を並列処理
-- **API制限対応**: 適切なレート制限でAPIを保護
-
-詳細な実装について: [docs/arxiv_async_usage.md](docs/arxiv_async_usage.md)
-
-## 注意事項
-
-- ollamaを使用して翻訳を行うため、事前にollamaのセットアップが必要です。
-- Notion APIの利用にはアカウントとAPIキーの設定が必要です。
-- aiohttpライブラリが必要です（並列処理のため）。
-
-
-
-# YouTube動画の要約ツール（get_youtube_summary_in_japanese.py）
-
-このツールは、YouTubeの動画URLを入力として受け取り、その内容を要約して日本語で出力するPythonスクリプトです。
-
-## 主な機能
-
-1. YouTubeから音声データをダウンロード
-2. 音声データを文字起こし（mlx_whisperを使用）
-3. 文字起こしされたテキストを要約
-4. 要約を日本語に翻訳（必要な場合）
-5. 結果をファイルに保存
-
-## 使い方
-
-1. 必要なライブラリをインストール:
-   ```
-   pip install yt_dlp mlx_whisper ollama argparse
-   ```
-
-2. スクリプトを実行:
-   ```
-   python get_youtube_summary_in_japanese.py [オプション]
-   ```
-
-   オプション:
-   - `-u`, `--youtube_url`: YouTube動画のURL
-   - `-o`, `--output_dir`: 出力ディレクトリ
-   - `-m`, `--model_path`: 使用する音声認識モデルのパス
-
-3. 結果の確認:
-   - `outputs/temp` ディレクトリ内の `youtube_summary.txt` ファイルに要約が保存されます
-   - `outputs/temp` ディレクトリ内の `audio_transcript.txt` ファイルに文字起こしの結果が保存されます
-
-## 必要な環境
-
-- Python 3.x
-- FFmpeg（`/opt/homebrew/bin/ffmpeg` にインストールされていることを想定）
-- Apple Silicon搭載のMac（MLXフレームワークを使用するため）
-- ollama（要約と翻訳に使用）
-- インターネット接続（YouTube動画のダウンロードと外部APIの利用のため）
-
-## 注意事項
-
-- FFmpegがインストールされている必要があります
-- ollamaを使用して要約と翻訳を行うため、事前にollamaのセットアップが必要です
-- 処理の進行状況はログファイル（`outputs/logs/youtube.log`）で確認できます
-- このスクリプトはApple Silicon搭載のMac上で動作することを前提としています。他の環境で使用する場合は、MLXフレームワークの代替を検討する必要があります。
-
-
-
-# Gmailから特定のメールを抽出して日本語要約するツール(1)（medium_daily_digest_to_notion_and_slack.py）
-
-このツールは、Gmail経由で受信したMedium Daily Digestメールから記事情報を抽出し、日本語の要約を付けてNotionデータベースに保存し、Slackに通知するPythonスクリプトです。並列処理により高速化されています。
-
-## 主な機能
-
-1.  **Gmail API連携**: 特定の日付のMedium Daily Digestメールを自動で検索・取得します。
-2.  **記事情報抽出**: メールのHTMLコンテンツを解析し、各記事のタイトル、URL、著者名を抽出します。
-3.  **翻訳と要約**: Ollamaを利用して、記事のタイトルと本文を日本語に翻訳・要約します。
-4.  **Notionへの保存**: 処理した記事情報を指定したNotionデータベースに保存します。重複チェック機能も備えています。
-5.  **Slack通知**: 処理結果をSlackに送信します（オプション）。
-6.  **並列処理**: 複数の記事を同時に処理し、3-5倍の高速化を実現。
-
-## 使い方
-
-1.  **Gmail APIの準備**:
-    - Google Cloud PlatformでGmail APIを有効にし、認証情報（`credentials.json`）をダウンロードしてプロジェクトのルートディレクトリに配置します。
-    - 初回実行時にブラウザで認証が求められます。認証後、`token.pickle`が生成され、以降の実行では自動で認証されます。
-
-2.  **必要な環境変数を設定**:
-    - `.env`ファイルを作成し、以下の変数を設定します。
-      ```
-      NOTION_API_KEY="your_notion_api_key"
-      NOTION_DB_ID_DAILY_DIGEST="your_notion_database_id"
-      SLACK_WEBHOOK_URL_MEDIUM_DAILY_DIGEST="your_slack_webhook_url"  # オプション
-      # GMAIL_CREDENTIALS_PATH="path/to/your/credentials.json" # オプション
-      ```
-
-3.  **必要なライブラリをインストール**:
-    ```bash
-    pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests beautifulsoup4 notion-client ollama python-dotenv pytz aiohttp
-    ```
-
-4.  **スクリプトを実行**:
-    - 今日のダイジェストを処理する場合（Notion保存 + Slack送信）:
-      ```bash
-      python script/medium_daily_digest_to_notion_and_slack.py
-      ```
-    - 特定の日付のダイジェストを処理する場合:
-      ```bash
-      python script/medium_daily_digest_to_notion_and_slack.py --date YYYY-MM-DD
-      ```
-    - Notionへの保存のみ（Slack送信をスキップ）:
-      ```bash
-      python script/medium_daily_digest_to_notion_and_slack.py --notion
-      ```
-    - Slackへの送信のみ（Notion保存をスキップ）:
-      ```bash
-      python script/medium_daily_digest_to_notion_and_slack.py --slack
-      ```
-
-5.  **結果の確認**:
-    - 指定したNotionデータベースに記事が保存されていることを確認します。
-    - Slackチャンネルに通知が送信されていることを確認します（有効な場合）。
-
-## パフォーマンス
-
-- **10記事の処理時間**: 約50秒 → 約12秒（4倍高速化）
-- **同時処理**: 最大10記事を並列処理
-- **エラー耐性**: 個別記事の失敗が全体に影響しない
-
-詳細な実装について: [docs/medium_daily_digest_async_usage.md](docs/medium_daily_digest_async_usage.md)
-
-## 注意事項
-
--   Ollamaがローカル環境で起動している必要があります。
--   Gmail APIの認証情報(`credentials.json`)が必要です。
--   Notionデータベースには、`Title`(Title), `Japanese Title`(Rich Text), `URL`(URL), `Author`(Rich Text), `Summary`(Rich Text), `Date`(Date) のプロパティが正しく設定されている必要があります。
--   Slack通知を使用する場合は、Webhook URLの設定が必要です。
--   aiohttpライブラリが必要です（並列処理のため）。
-
-
-# Gmailから特定のメールを抽出して日本語要約するツール(2)（gmail_alerts_to_notion_and_slack.py）
-
-このツールは、Gmail経由で受信したGoogle Alertsメールから各アラートの内容を抽出し、日本語の要約を付けてNotionデータベースに保存し、Slackに通知するPythonスクリプトです。
-
-## 主な機能
-
-1. **Gmail API連携**: Google Alertsからのメールを自動で検索・取得します（デフォルトは過去6時間）。
-2. **アラート情報抽出**: メールのHTMLコンテンツを解析し、各アラートのタイトル、URL、ソース、スニペットを抽出します。
-3. **日本語翻訳・要約**: Ollamaを利用して、各アラートの内容を日本語に翻訳・要約します。
-4. **Notion保存**: 処理したアラート情報をNotionデータベースに保存します。重複チェック機能付き。
-5. **Slack通知**: 処理結果をSlackに送信します（オプション）。
-6. **並列処理**: 複数のアラートを並列で処理し、高速化を実現。
-
-## 使い方
-
-1. **Gmail APIの準備**:
-   - Medium Daily Digestツールと同じ手順でGmail APIを設定します。
-   - 既に設定済みの場合は、同じ`credentials.json`と`token.pickle`を使用できます。
-
-2. **必要な環境変数を設定**:
-   - `.env`ファイルに以下の変数を追加します。
-     ```
-     NOTION_API_KEY="your_notion_api_key"
-     NOTION_DB_ID_GOOGLE_ALERTS="your_google_alerts_database_id"
-     SLACK_WEBHOOK_URL_GOOGLE_ALERTS="your_slack_webhook_url"  # オプション
-     ```
-
-3. **必要なライブラリをインストール**:
-   ```bash
-   pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib requests beautifulsoup4 notion-client ollama python-dotenv pytz
-   ```
-
-4. **スクリプトを実行**:
-   - 過去6時間のアラートを処理する場合（デフォルト）:
-     ```bash
-     python script/gmail_alerts_to_notion_and_slack.py
-     ```
-   - 過去N時間のアラートを処理する場合:
-     ```bash
-     python script/gmail_alerts_to_notion_and_slack.py --hours 12
-     ```
-   - 特定の日付のアラートを処理する場合:
-     ```bash
-     python script/gmail_alerts_to_notion_and_slack.py --date YYYY-MM-DD
-     ```
-   - Notionへの保存のみ（Slack送信をスキップ）:
-     ```bash
-     python script/gmail_alerts_to_notion_and_slack.py --notion
-     ```
-   - Slackへの送信のみ（Notion保存をスキップ）:
-     ```bash
-     python script/gmail_alerts_to_notion_and_slack.py --slack
-     ```
-
-5. **結果の確認**:
-   - 指定したNotionデータベースにアラート情報が保存されていることを確認します。
-   - Slackチャンネルに通知が送信されていることを確認します（有効な場合）。
-
-## 定期実行の設定例
-
-cron等で定期実行する場合の例：
-
-```bash
-# 6時間ごとに実行（デフォルト設定で過去6時間のメールを処理）
-0 */6 * * * cd /path/to/minitools && python script/gmail_alerts_to_notion_and_slack.py
+```
+minitools/
+├── minitools/              # メインパッケージ
+│   ├── collectors/         # データ収集モジュール
+│   │   ├── arxiv.py       # ArXiv論文収集
+│   │   ├── medium.py      # Medium Daily Digest収集
+│   │   ├── google_alerts.py  # Google Alerts収集
+│   │   └── youtube.py     # YouTube動画処理
+│   ├── processors/        # データ処理モジュール
+│   │   ├── translator.py  # 翻訳処理
+│   │   └── summarizer.py  # 要約処理
+│   ├── publishers/        # 出力先モジュール
+│   │   ├── notion.py      # Notion連携
+│   │   └── slack.py       # Slack連携
+│   └── utils/             # ユーティリティ
+│       └── logger.py      # カラー対応ロギング
+├── scripts/               # 実行可能スクリプト
+├── docs/                  # ドキュメント
+└── outputs/               # 出力ファイル
 ```
 
-## 注意事項
+## インストール
 
-- Ollamaがローカル環境で起動している必要があります。
-- Gmail APIの認証情報が必要です（Medium Daily Digestツールと共有可能）。
-- Notionデータベースには、`Title`(Title), `Japanese Title`(Rich Text), `URL`(URL), `Source`(Rich Text), `Summary`(Rich Text), `Date`(Date) のプロパティが必要です。
-- 並列処理により、大量のアラートも効率的に処理できます。
+### 前提条件
+
+このプロジェクトは[uv](https://github.com/astral-sh/uv)を使用してPython環境と依存関係を管理しています。uvはRustで実装された高速なPythonパッケージマネージャーです。
+
+**uvのインストール:**
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# または Homebrew (macOS)
+brew install uv
+
+# Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### 1. リポジトリのクローン
+
+```bash
+git clone https://github.com/yourusername/minitools.git
+cd minitools
+```
+
+### 2. 依存関係のインストール
+
+```bash
+# 基本機能のインストール（ArXiv、Medium、Google Alerts）
+uv sync
+
+# YouTube要約機能も含める場合
+uv sync --extra whisper
+
+# 仮想環境を有効化（必要に応じて）
+source .venv/bin/activate  # macOS/Linux
+# または
+.venv\Scripts\activate  # Windows
+```
+
+**注意**: Apple Silicon Macユーザーへ
+- YouTube要約機能（mlx-whisper）はオプションです
+- scipyのインストールでエラーが出る場合は、基本機能のみインストールしてください
+
+従来のpipを使用する場合:
+```bash
+# pipでもインストール可能（uvを使いたくない場合）
+pip install -e .
+# YouTube要約機能を含める場合
+pip install -e ".[whisper]"
+```
+
+### 3. 設定ファイルの準備
+
+#### 環境変数の設定（セキュリティ関連）
+
+`.env`ファイルを作成し、APIキーなどのセキュリティ関連の環境変数を設定：
+
+```bash
+# Notion API
+NOTION_API_KEY="your_notion_api_key"
+NOTION_DB_ID="your_arxiv_database_id"
+NOTION_DB_ID_DAILY_DIGEST="your_medium_database_id"
+NOTION_DB_ID_GOOGLE_ALERTS="your_google_alerts_database_id"
+
+# Slack Webhooks（オプション）
+SLACK_WEBHOOK_URL="your_arxiv_slack_webhook"
+SLACK_WEBHOOK_URL_MEDIUM_DAILY_DIGEST="your_medium_slack_webhook"
+SLACK_WEBHOOK_URL_GOOGLE_ALERTS="your_google_alerts_slack_webhook"
+
+# Gmail API（Medium/Google Alerts用）
+GMAIL_CREDENTIALS_PATH="credentials.json"
+```
+
+#### アプリケーション設定（モデル、パラメータ等）
+
+`settings.yaml.example`を`settings.yaml`にコピーして、必要に応じて設定を変更：
+
+```bash
+cp settings.yaml.example settings.yaml
+```
+
+主な設定項目：
+- **models**: Ollamaモデルの設定（翻訳・要約用）
+- **processing**: 並列処理やリトライの設定
+- **defaults**: 各ツールのデフォルト値
+- **logging**: ログレベルや出力先の設定
+
+詳細は`settings.yaml.example`のコメントを参照してください。
+
+### 4. 必要なセットアップ
+
+- **Ollama**: ローカルLLMの実行環境
+  ```bash
+  # Ollamaのインストールと起動
+  brew install ollama
+  ollama serve
+  ollama pull gemma2  # Medium/YouTubeの要約用
+  ollama pull gemma3:27b  # ArXiv/Google Alertsの翻訳・要約用
+  ```
+
+- **Gmail API**: Google Cloud Platformで有効化し、`credentials.json`を取得
+
+- **FFmpeg**: YouTube処理用（macOS）
+  ```bash
+  brew install ffmpeg
+  ```
+
+### 5. uvを使った開発
+
+```bash
+# パッケージの追加
+uv add package-name
+
+# 開発用パッケージの追加
+uv add --dev pytest black ruff
+
+# 依存関係の更新
+uv sync
+
+# スクリプトの実行（仮想環境を自動的に使用）
+uv run minitools-arxiv --keywords "machine learning"
+
+# Pythonインタープリターの実行
+uv run python
+
+# 依存関係の確認
+uv pip list
+```
+
+## 使い方
+
+### コマンドラインツール
+
+インストール後、以下のコマンドが利用可能になります。
+仮想環境を有効化している場合は直接実行、uvを使う場合は`uv run`を付けて実行：
+
+#### ArXiv論文検索
+```bash
+# 基本的な使い方（仮想環境有効化済み）
+minitools-arxiv --keywords "LLM" "RAG" --days 7
+
+# uvを使った実行（仮想環境の有効化不要）
+uv run minitools-arxiv --keywords "LLM" "(RAG OR FINETUNING OR AGENT)" --days 30 --max-results 100
+
+# 特定の日付を基準に検索
+uv run minitools-arxiv --date 2024-01-15 --days 7  # 1/9〜1/15の論文を検索
+
+# Notionのみに保存
+uv run minitools-arxiv --no-slack
+```
+
+#### Medium Daily Digest
+```bash
+# 今日のダイジェストを処理
+minitools-medium
+# または
+uv run minitools-medium
+
+# 特定の日付を処理
+uv run minitools-medium --date 2024-01-15
+
+# Notionのみに保存
+uv run minitools-medium --notion
+```
+
+#### Google Alerts
+```bash
+# 過去6時間のアラートを処理（デフォルト）
+minitools-google-alerts
+# または
+uv run minitools-google-alerts
+
+# 過去12時間のアラートを処理
+uv run minitools-google-alerts --hours 12
+
+# 特定の日付のアラートを処理
+uv run minitools-google-alerts --date 2024-01-15
+```
+
+#### YouTube要約
+```bash
+# YouTube動画を要約（whisperオプションのインストールが必要）
+minitools-youtube --url "https://www.youtube.com/watch?v=..."
+# または
+uv run minitools-youtube --url "https://www.youtube.com/watch?v=..."
+
+# 出力ディレクトリとモデルを指定
+uv run minitools-youtube --url "URL" --output_dir outputs --model_path mlx-community/whisper-large-v3-turbo
+```
+
+### Pythonモジュールとして使用
+
+```python
+import asyncio
+from minitools.collectors import ArxivCollector
+from minitools.processors import Translator
+from minitools.publishers import NotionPublisher
+
+async def main():
+    # ArXiv論文を収集
+    collector = ArxivCollector()
+    papers = collector.search(
+        queries=["machine learning"],
+        start_date="20240101",
+        end_date="20240131"
+    )
+    
+    # 翻訳処理
+    translator = Translator()
+    for paper in papers:
+        result = await translator.translate_with_summary(
+            title=paper['title'],
+            content=paper['abstract']
+        )
+        paper.update(result)
+    
+    # Notionに保存
+    publisher = NotionPublisher()
+    await publisher.batch_save_articles(
+        database_id="your_database_id",
+        articles=papers
+    )
+
+asyncio.run(main())
+```
+
+### 既存スクリプトとの互換性
+
+従来のスクリプトも引き続き使用可能です：
+
+```bash
+# 従来の方法（後方互換性のため維持）
+python scripts/arxiv.py --keywords "LLM" --days 7
+python scripts/medium.py --date 2024-01-15
+python scripts/google_alerts.py --hours 12
+python scripts/youtube.py --url "https://www.youtube.com/watch?v=..."
+
+# uvを使った実行
+uv run python scripts/arxiv.py --keywords "LLM" --date 2024-01-15
+uv run python scripts/medium.py --date 2024-01-15
+uv run python scripts/google_alerts.py --date 2024-01-15
+uv run python scripts/youtube.py --url "URL"
+```
+
+## 各ツールの詳細
+
+### ArXiv論文要約ツール
+
+arXivから指定キーワードで論文を検索し、要約を日本語に翻訳してNotionに保存、Slackに通知します。
+
+**特徴**:
+- 並列処理により50論文を約60秒で処理（4倍高速化）
+- 最大10論文を同時処理
+- 適切なレート制限でAPIを保護
+
+**オプション**:
+- `--keywords`: 検索キーワード（複数指定可、デフォルト: "LLM" "(RAG OR FINETUNING OR AGENT)"）
+- `--days`: 何日前から検索するか（デフォルト: 1）
+- `--date`: 基準日（YYYY-MM-DD形式、デフォルト: 昨日）
+- `--max-results`: 最大検索結果数（デフォルト: 50）
+- `--no-slack`: Slack送信をスキップ
+- `--no-notion`: Notion保存をスキップ
+
+詳細: [docs/arxiv_async_usage.md](docs/arxiv_async_usage.md)
+
+### Medium Daily Digest
+
+Gmail経由で受信したMedium Daily Digestメールから記事を抽出し、日本語要約を付けてNotionに保存、Slackに通知します。
+
+**特徴**:
+- 10記事を約12秒で処理（4倍高速化）
+- Gmail API連携で自動取得
+- 重複チェック機能
+
+**オプション**:
+- `--date`: 処理する日付（YYYY-MM-DD形式）
+- `--notion`: Notion保存のみ
+- `--slack`: Slack送信のみ
+
+詳細: [docs/medium_daily_digest_async_usage.md](docs/medium_daily_digest_async_usage.md)
+
+### Google Alerts
+
+Google Alertsメールから各アラートを抽出し、日本語要約を付けてNotionに保存、Slackに通知します。
+
+**特徴**:
+- デフォルトで過去6時間のメールを処理
+- 並列処理で高速化
+- 定期実行に最適
+
+**オプション**:
+- `--hours`: 過去何時間分を処理するか
+- `--date`: 特定日付の全メールを処理
+- `--notion`: Notion保存のみ
+- `--slack`: Slack送信のみ
+
+**定期実行の設定例（cron）**:
+```bash
+# 6時間ごとに実行（uvを使用）
+0 */6 * * * cd /path/to/minitools && /path/to/uv run minitools-google-alerts
+
+# または仮想環境を直接指定
+0 */6 * * * cd /path/to/minitools && .venv/bin/minitools-google-alerts
+```
+
+### YouTube要約ツール
+
+YouTube動画の音声を文字起こしし、要約を日本語で出力します。
+
+**特徴**:
+- MLX Whisperによる高速文字起こし
+- Ollamaによる要約と翻訳
+- Apple Silicon Mac最適化
+
+**必要な環境**:
+- Apple Silicon搭載Mac（MLX使用）
+- FFmpeg
+- 十分なストレージ（一時ファイル用）
+- `uv sync --extra whisper`でインストール
+
+**オプション**:
+- `--url`, `-u`: YouTube動画のURL（必須）
+- `--output_dir`, `-o`: 出力ディレクトリ（デフォルト: outputs）
+- `--model_path`, `-m`: Whisperモデル（デフォルト: mlx-community/whisper-large-v3-turbo）
+- `--no-save`: ファイル保存をスキップ
+
+## Notionデータベースの設定
+
+各ツール用のNotionデータベースには以下のプロパティが必要です：
+
+### ArXiv / Medium / Google Alerts共通
+- `Title` (Title): 記事タイトル
+- `Japanese Title` (Rich Text): 日本語タイトル
+- `URL` (URL): 元記事のURL
+- `Author` (Rich Text): 著者名
+- `Summary` (Rich Text): 日本語要約
+- `Date` (Date): 処理日付
+
+### Google Alerts追加
+- `Source` (Rich Text): ソース情報
+
+## トラブルシューティング
+
+### Gmail API認証エラー
+1. Google Cloud PlatformでGmail APIが有効になっているか確認
+2. `credentials.json`が正しい場所にあるか確認
+3. `token.pickle`を削除して再認証
+
+### Ollama接続エラー
+```bash
+# Ollamaが起動しているか確認
+ollama list
+
+# 起動していない場合
+ollama serve
+```
+
+### Notion保存エラー
+- APIキーが正しいか確認
+- データベースIDが正しいか確認
+- 必要なプロパティが設定されているか確認
+
+## 開発
+
+### 開発環境のセットアップ
+```bash
+# 開発用依存関係のインストール
+uv add --dev pytest black ruff mypy
+
+# コードフォーマット
+uv run black minitools/
+uv run ruff check minitools/
+
+# 型チェック
+uv run mypy minitools/
+```
+
+### テストの実行
+```bash
+# テストの実行
+uv run pytest tests/
+
+# カバレッジ付きテスト
+uv run pytest tests/ --cov=minitools
+```
+
+### ログの確認
+```bash
+# ログファイルの場所
+tail -f outputs/logs/arxiv.log
+tail -f outputs/logs/medium_daily_digest.log
+tail -f outputs/logs/google_alerts.log
+tail -f outputs/logs/youtube.log
+```
+
+### カスタムモジュールの作成
+```python
+from minitools.collectors import BaseCollector
+from minitools.utils import setup_logger
+
+class MyCollector(BaseCollector):
+    def __init__(self):
+        self.logger = setup_logger(__name__)
+    
+    def collect(self):
+        # カスタム収集ロジック
+        pass
+```
+
+### uvの便利なコマンド
+
+```bash
+# 依存関係のツリー表示
+uv pip tree
+
+# 古い依存関係の確認
+uv pip list --outdated
+
+# 仮想環境の場所を確認
+uv venv --python 3.11
+
+# キャッシュのクリア（scipyエラー時などに有効）
+uv cache clean
+rm -rf /Users/$USER/.cache/uv  # 完全クリア
+
+# プロジェクトの依存関係をロック
+uv lock
+
+# オプション機能の確認
+uv sync --extra whisper  # YouTube要約機能
+```
+
+## ライセンス
+
+MIT License
+
+## 貢献
+
+プルリクエストを歓迎します。大きな変更の場合は、まずissueを開いて変更内容について議論してください。
+
+## サポート
+
+問題が発生した場合は、[Issues](https://github.com/yourusername/minitools/issues)でお知らせください。
