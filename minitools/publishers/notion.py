@@ -54,11 +54,13 @@ class NotionPublisher:
             
             exists = len(result.get('results', [])) > 0
             if exists:
-                logger.debug(f"URL already exists in database: {url}")
+                logger.info(f"既に存在するためスキップ: {url}")
+            else:
+                logger.debug(f"新規記事として処理: {url}")
             return exists
             
         except Exception as e:
-            logger.error(f"Error checking existing entry: {e}")
+            logger.error(f"重複チェックエラー: {e}")
             return False
     
     async def create_page(self, database_id: str, properties: Dict[str, Any]) -> Optional[str]:
@@ -83,11 +85,11 @@ class NotionPublisher:
             )
             
             page_id = page.get('id')
-            logger.info(f"Created Notion page: {page_id}")
+            logger.debug(f"Notionページ作成完了: {page_id}")
             return page_id
             
         except Exception as e:
-            logger.error(f"Error creating Notion page: {e}")
+            logger.error(f"Notionページ作成エラー: {e}")
             return None
     
     async def save_article(self, database_id: str, article_data: Dict[str, Any]) -> bool:
@@ -103,9 +105,12 @@ class NotionPublisher:
         """
         # URLの重複チェック
         url = article_data.get('url')
+        title = article_data.get('title', 'Unknown')
         if url and await self.check_existing(database_id, url):
-            logger.info(f"Skipping duplicate article: {article_data.get('title', 'Unknown')}")
+            logger.info(f"  -> 既に存在するためスキップ: {title[:50]}..." if len(title) > 50 else f"  -> 既に存在するためスキップ: {title}")
             return False
+        
+        logger.info(f"  -> 保存中: {title[:50]}..." if len(title) > 50 else f"  -> 保存中: {title}")
         
         # Notionプロパティの構築
         properties = self._build_article_properties(article_data)
@@ -126,33 +131,25 @@ class NotionPublisher:
         """
         properties = {}
         
-        # タイトル (日本語タイトルがある場合はそれを優先)
-        if 'japanese_title' in article_data:
-            properties['Title'] = {
-                "title": [{"text": {"content": article_data['japanese_title']}}]
-            }
-        elif 'title' in article_data:
+        # タイトル (元の英語タイトル)
+        if 'title' in article_data:
             properties['Title'] = {
                 "title": [{"text": {"content": article_data['title']}}]
             }
         
-        # 元のタイトル (Original Title)
-        if 'title' in article_data:
-            properties['Original Title'] = {
-                "rich_text": [{"text": {"content": article_data['title']}}]
+        # 日本語タイトル (Japanese Title) - 旧スクリプトとの互換性のため
+        if 'japanese_title' in article_data:
+            properties['Japanese Title'] = {
+                "rich_text": [{"text": {"content": article_data['japanese_title']}}]
             }
         
         # URL
         if 'url' in article_data:
             properties['URL'] = {"url": article_data['url']}
         
-        # ソース/著者 (Source)
-        if 'source' in article_data:
-            properties['Source'] = {
-                "rich_text": [{"text": {"content": article_data['source']}}]
-            }
-        elif 'author' in article_data:
-            properties['Source'] = {
+        # 著者 (Author)
+        if 'author' in article_data:
+            properties['Author'] = {
                 "rich_text": [{"text": {"content": article_data['author']}}]
             }
         
@@ -215,12 +212,14 @@ class NotionPublisher:
                     else:
                         stats["skipped"] += 1
                 except Exception as e:
-                    logger.error(f"Error saving article '{article.get('title', 'Unknown')}': {e}")
+                    title = article.get('title', 'Unknown')
+                    error_title = f"{title[:50]}..." if len(title) > 50 else title
+                    logger.error(f"記事の保存エラー '{error_title}': {e}")
                     stats["failed"] += 1
         
         # 全記事を並列処理
         tasks = [save_with_semaphore(article) for article in articles]
         await asyncio.gather(*tasks)
         
-        logger.info(f"Batch save completed: {stats}")
+        logger.info(f"バッチ保存完了: 成功={stats['success']}, スキップ={stats['skipped']}, 失敗={stats['failed']}")
         return stats

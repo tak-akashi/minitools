@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
 import asyncio
+import logging
 from datetime import datetime, timedelta
 
 import pytz
@@ -20,10 +21,12 @@ from minitools.processors.translator import Translator
 from minitools.publishers.notion import NotionPublisher
 from minitools.publishers.slack import SlackPublisher
 from minitools.utils.logger import setup_logger
+from minitools.utils.config import get_config
 
 load_dotenv()
 
-logger = setup_logger(__name__, log_file="arxiv.log")
+# ロガーは後で初期化（argparseの前には基本設定のみ）
+logger = None
 
 
 def main():
@@ -49,8 +52,24 @@ async def main_async():
                        help='Notion保存をスキップ')
     parser.add_argument('--no-slack', action='store_true', 
                        help='Slackへの投稿をスキップ')
+    parser.add_argument('--debug', action='store_true',
+                       help='デバッグモードで実行')
     
     args = parser.parse_args()
+    
+    # 設定ファイルからデフォルトログレベルを取得
+    config = get_config()
+    default_log_level = config.get('logging.level', 'INFO').upper()
+    
+    # デバッグオプションが指定されている場合は上書き
+    if args.debug:
+        log_level = logging.DEBUG
+    else:
+        log_level = getattr(logging, default_log_level, logging.INFO)
+    
+    # ロガーの初期化
+    global logger
+    logger = setup_logger("scripts.arxiv", log_file="arxiv.log", level=log_level)
     
     # 日付範囲の設定（base_dateを基準に計算）
     base_date = datetime.strptime(args.date, "%Y-%m-%d")

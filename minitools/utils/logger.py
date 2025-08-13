@@ -50,24 +50,16 @@ class ColoredFormatter(logging.Formatter):
     
     def format(self, record: logging.LogRecord) -> str:
         """ログレコードをフォーマット（カラー付き）"""
-        # まず基本フォーマットを適用
-        formatted = super().format(record)
-        
-        # timestamp と name: message の間に [LEVEL] を挿入
-        # formatted は "timestamp name: message" の形式
-        parts = formatted.split(' ', 2)  # 最初の2つのスペースで分割
-        if len(parts) >= 3:
-            timestamp = parts[0] + ' ' + parts[1]  # YYYY-MM-DD HH:MM:SS
-            rest = parts[2]  # name: message
-            
-            if self.use_colors and record.levelname in self.COLORS:
-                # [色付きLEVEL] を挿入
-                level_str = f"[{self.COLORS[record.levelname]}{record.levelname:<7}{self.RESET}]"
-            else:
-                # カラーなしの場合も[LEVEL]を挿入
-                level_str = f"[{record.levelname:<7}]"
-            
-            formatted = f"{timestamp} {level_str} {rest}"
+        # カラーコードを適用する場合
+        if self.use_colors and record.levelname in self.COLORS:
+            # レベル名を一時的にカラー付きに変更
+            original_levelname = record.levelname
+            record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{self.RESET}"
+            formatted = super().format(record)
+            record.levelname = original_levelname  # 元に戻す
+        else:
+            # カラーなしの場合
+            formatted = super().format(record)
         
         return formatted
 
@@ -101,20 +93,26 @@ def setup_logger(
     # 既存のハンドラをクリア（重複を防ぐため）
     logger.handlers = []
     
-    # フォーマットの定義
-    format_string = '%(asctime)s %(name)s: %(message)s'
+    # フォーマットの定義（統一）
+    format_string = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
     date_format = '%Y-%m-%d %H:%M:%S'
     
     # コンソールハンドラの設定
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(console_level or level)
     
-    # カラー付きフォーマッターを使用
-    console_formatter = ColoredFormatter(
-        fmt=format_string,
-        datefmt=date_format,
-        use_colors=use_colors
-    )
+    # フォーマッターを使用（カラーは必要に応じて）
+    if use_colors:
+        console_formatter = ColoredFormatter(
+            fmt=format_string,
+            datefmt=date_format,
+            use_colors=use_colors
+        )
+    else:
+        console_formatter = logging.Formatter(
+            fmt=format_string,
+            datefmt=date_format
+        )
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
