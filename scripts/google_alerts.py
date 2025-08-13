@@ -61,53 +61,81 @@ async def main_async():
     
     # 日付の設定
     target_date = None
+    date_specified = False
     if args.date:
         try:
             target_date = datetime.strptime(args.date, '%Y-%m-%d')
+            date_specified = True
+            logger.info(f"指定日付 {args.date} のGoogle Alertsメールを取得します")
         except ValueError:
             logger.error("日付は YYYY-MM-DD 形式で指定してください")
             return
+    else:
+        logger.info(f"過去{args.hours}時間のGoogle Alertsメールを取得します")
     
     # フラグの処理
     save_notion = not args.slack or args.notion
     send_slack = not args.notion or args.slack
     
+    # 処理内容のログ出力
+    if save_notion and send_slack:
+        logger.info("処理内容: Notion保存 + Slack送信")
+    elif save_notion:
+        logger.info("処理内容: Notion保存のみ")
+    elif send_slack:
+        logger.info("処理内容: Slack送信のみ")
+    
     # コレクターの初期化
+    logger.info("Google Alerts Collectorを初期化中...")
     collector = GoogleAlertsCollector()
     
     # メールを取得
-    logger.info(f"Fetching Google Alerts emails...")
-    
-    if target_date:
+    if date_specified:
+        logger.info(f"Google Alerts ({target_date.strftime('%Y-%m-%d')}) の処理を開始します...")
         emails = collector.get_alerts_emails(date=target_date)
     else:
+        logger.info(f"Google Alerts (過去{args.hours}時間) の処理を開始します...")
         emails = collector.get_alerts_emails(hours_back=args.hours)
     
     if not emails:
-        logger.info("No Google Alerts emails found")
+        if date_specified:
+            logger.warning(f"{target_date.strftime('%Y-%m-%d')} のGoogle Alertsメールが見つかりません")
+        else:
+            logger.warning(f"過去{args.hours}時間のGoogle Alertsメールが見つかりません")
         return
+    
+    logger.info(f"Gmail検索結果: {len(emails)}件のメッセージが見つかりました")
     
     # アラートを抽出
     all_alerts = []
-    for email in emails:
+    logger.info(f"{len(emails)}件のメールからアラートを抽出中...")
+    for i, email in enumerate(emails, 1):
+        logger.info(f"メール処理中 ({i}/{len(emails)}): {email.get('id', 'unknown')}")
         alerts = collector.parse_alerts(email)
+        if alerts:
+            logger.info(f"  -> {len(alerts)}件のアラートを抽出")
         all_alerts.extend(alerts)
     
     if not all_alerts:
-        logger.info("No alerts found in emails")
+        logger.warning("アラートが見つかりませんでした")
         return
     
-    logger.info(f"Found {len(all_alerts)} alerts")
+    logger.info(f"{len(all_alerts)}件のアラートを検出しました")
     
     # 記事の本文を取得
+    logger.info(f"記事コンテンツ取得開始: {len(all_alerts)}件のアラートを処理中...")
     await collector.fetch_articles_for_alerts(all_alerts)
+    logger.info("記事コンテンツ取得完了")
     
     # 翻訳と要約
     translator = Translator()
     processed_alerts = []
     
-    for alert in all_alerts:
+    logger.info(f"翻訳・要約処理開始: {len(all_alerts)}件のアラートを処理中...")
+    for i, alert in enumerate(all_alerts, 1):
         try:
+            logger.info(f"  -> 翻訳・要約処理中 ({i}/{len(all_alerts)}): {alert.title[:50]}...")
+            
             # 記事本文がある場合はそれを、ない場合はスニペットを使用
             content = alert.article_content if alert.article_content else alert.snippet
             
@@ -117,6 +145,8 @@ async def main_async():
                 content=content,
                 author=alert.source
             )
+            
+            logger.info(f"    -> 翻訳・要約完了: {result['japanese_title'][:30]}...")
             
             # 辞書形式に変換
             processed_alerts.append({
@@ -129,34 +159,45 @@ async def main_async():
             })
             
         except Exception as e:
-            logger.error(f"Error processing alert '{alert.title}': {e}")
+            logger.error(f"翻訳・要約エラー ({alert.title}): {e}")
+    
+    logger.info(f"翻訳・要約処理完了: {len(processed_alerts)}件を処理")
     
     # Notionに保存
     if save_notion and processed_alerts:
         database_id = os.getenv('NOTION_DB_ID_GOOGLE_ALERTS')
         if database_id:
             try:
+                logger.info(f"Notion保存開始: {len(processed_alerts)}件のアラートを保存中...")
                 publisher = NotionPublisher()
                 stats = await publisher.batch_save_articles(database_id, processed_alerts)
-                logger.info(f"Saved to Notion: {stats}")
+                logger.info(f"Notion保存完了: {stats}")
+                logger.info(f"  -> 成功: {stats.get('success', 0)}件")
+                logger.info(f"  -> スキップ: {stats.get('skipped', 0)}件")
+                logger.info(f"  -> 失敗: {stats.get('failed', 0)}件")
             except Exception as e:
-                logger.error(f"Error saving to Notion: {e}")
+                logger.error(f"Notion保存エラー: {e}")
+        else:
+            logger.warning("NOTION_DB_ID_GOOGLE_ALERTS環境変数が設定されていません")
     
     # Slackに送信
     if send_slack and processed_alerts:
         webhook_url = os.getenv('SLACK_WEBHOOK_URL_GOOGLE_ALERTS')
         if webhook_url:
             try:
+                logger.info(f"Slack送信開始: {len(processed_alerts)}件のアラートを送信中...")
                 async with SlackPublisher(webhook_url) as slack:
                     await slack.send_articles(
                         processed_alerts,
                         title="Google Alerts"
                     )
-                logger.info("Sent to Slack")
+                logger.info("Slackへの送信が完了しました")
             except Exception as e:
-                logger.error(f"Error sending to Slack: {e}")
+                logger.error(f"Slackへの送信エラー: {e}")
+        else:
+            logger.warning("SLACK_WEBHOOK_URL_GOOGLE_ALERTS環境変数が設定されていません")
     
-    logger.info("Processing completed")
+    logger.info("処理が完了しました")
 
 
 if __name__ == "__main__":

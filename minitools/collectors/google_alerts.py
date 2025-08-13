@@ -100,17 +100,20 @@ class GoogleAlertsCollector:
                 date = jst.localize(date)
             start_time = date.replace(hour=0, minute=0, second=0, microsecond=0)
             end_time = start_time + timedelta(days=1)
+            logger.info(f"検索期間 (JST): {start_time} から {end_time} (指定日全日)")
         else:
             # 過去数時間のメールを取得
             end_time = datetime.now(jst)
             start_time = end_time - timedelta(hours=hours_back)
+            logger.info(f"検索期間 (JST): {start_time} から {end_time} (過去{hours_back}時間)")
         
         # タイムスタンプに変換
         start_timestamp = int(start_time.timestamp())
         end_timestamp = int(end_time.timestamp())
+        logger.info(f"タイムスタンプ: {start_timestamp} から {end_timestamp}")
         
         query = f'from:googlealerts-noreply@google.com after:{start_timestamp} before:{end_timestamp}'
-        logger.info(f"Searching Gmail with query: {query}")
+        logger.info(f"Gmail検索クエリ: {query}")
         
         try:
             response = self.gmail_service.users().messages().list(
@@ -120,23 +123,40 @@ class GoogleAlertsCollector:
             
             messages = response.get('messages', [])
             
+            logger.info(f"Gmail検索結果: {len(messages)}件のメッセージが見つかりました")
+            
             if not messages:
-                logger.info("No Google Alerts emails found")
+                logger.warning("Google Alertsメールが見つかりません")
                 return []
             
             # メッセージの詳細を取得
             detailed_messages = []
-            for msg in messages:
+            logger.info(f"{len(messages)}件のメッセージの詳細を取得中...")
+            for i, msg in enumerate(messages, 1):
                 try:
+                    logger.info(f"  -> メッセージ取得中 ({i}/{len(messages)}): {msg['id']}")
                     detail = self.gmail_service.users().messages().get(
                         userId='me',
                         id=msg['id']
                     ).execute()
+                    
+                    # メール件名を取得してログ出力
+                    headers = detail['payload'].get('headers', [])
+                    subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
+                    logger.info(f"    -> 件名: {subject}")
+                    
+                    # メール配信日時を取得してログ出力
+                    if 'internalDate' in detail:
+                        jst = pytz.timezone('Asia/Tokyo')
+                        email_timestamp = int(detail['internalDate']) / 1000
+                        email_date = datetime.fromtimestamp(email_timestamp, tz=jst)
+                        logger.info(f"    -> メール配信日時: {email_date}")
+                    
                     detailed_messages.append(detail)
                 except HttpError as e:
-                    logger.error(f"Error fetching message {msg['id']}: {e}")
+                    logger.error(f"メッセージ取得エラー ({msg['id']}): {e}")
             
-            logger.info(f"Found {len(detailed_messages)} Google Alerts emails")
+            logger.info(f"{len(detailed_messages)}件のGoogle Alertsメールを取得しました")
             return detailed_messages
             
         except HttpError as error:
@@ -163,10 +183,10 @@ class GoogleAlertsCollector:
         
         # Google Alertsのリンクパターンを探す
         alert_links = soup.find_all('a', href=re.compile(r'https://www\.google\.com/url\?'))
-        logger.info(f"Found {len(alert_links)} Google Alerts links")
+        logger.info(f"Google Alertsリンクを {len(alert_links)}個発見")
         
         if not alert_links:
-            logger.warning("No Google Alerts links found in email")
+            logger.warning("Google Alertsリンクが見つかりません")
             return []
         
         seen_urls = set()
@@ -230,10 +250,10 @@ class GoogleAlertsCollector:
                     alerts.append(alert)
                     
             except Exception as e:
-                logger.error(f"Error parsing URL: {e}")
+                logger.error(f"URL解析エラー: {e}")
                 continue
         
-        logger.info(f"Parsed {len(alerts)} alerts from email")
+        logger.info(f"メールから{len(alerts)}件のアラートを抽出")
         return alerts
     
     def _extract_body(self, message: Dict) -> str:
@@ -420,11 +440,12 @@ class GoogleAlertsCollector:
         """
         import asyncio
         
-        logger.info(f"Fetching article content for {len(alerts)} alerts...")
+        logger.info(f"記事コンテンツ並列取得開始: {len(alerts)}件のアラートを処理中...")
         
         # 各アラートの記事取得タスクを作成
         tasks = []
-        for alert in alerts:
+        for i, alert in enumerate(alerts, 1):
+            logger.info(f"  -> 記事取得中 ({i}/{len(alerts)}): {alert.url[:50]}...")
             task = self.fetch_article_content(alert.url)
             tasks.append(task)
         
@@ -432,13 +453,17 @@ class GoogleAlertsCollector:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # 結果をアラートに設定
-        for alert, result in zip(alerts, results):
+        success_count = 0
+        for i, (alert, result) in enumerate(zip(alerts, results), 1):
             if isinstance(result, Exception):
-                logger.error(f"記事取得エラー ({alert.url}): {result}")
+                logger.error(f"  -> 記事取得エラー ({i}/{len(alerts)}): {alert.url}: {result}")
                 alert.article_content = ""
             else:
                 alert.article_content = result or ""
                 if alert.article_content:
-                    logger.debug(f"記事取得成功: {alert.url[:50]}...")
+                    logger.info(f"  -> 記事取得完了 ({i}/{len(alerts)}): {alert.url[:50]}...")
+                    success_count += 1
                 else:
-                    logger.debug(f"記事取得失敗（空のコンテンツ）: {alert.url[:50]}...")
+                    logger.warning(f"  -> 記事取得失敗（空のコンテンツ） ({i}/{len(alerts)}): {alert.url[:50]}...")
+        
+        logger.info(f"記事コンテンツ取得完了: {success_count}/{len(alerts)}件成功")
