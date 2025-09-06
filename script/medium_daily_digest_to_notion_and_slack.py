@@ -280,13 +280,17 @@ class MediumDigestProcessorAsync:
             if not url or url in seen_urls:
                 continue
             
-            # URLクリーンアップ
-            clean_url = url.split('?')[0]
+            # URLクリーンアップ（トラッキングパラメータを完全に除去）
+            clean_url = self._clean_url(url)
+            if clean_url in seen_urls:
+                logger.debug(f"重複URLをスキップ: {clean_url}")
+                continue
             seen_urls.add(clean_url)
             
             # タイトルと著者の抽出
             title = link.get_text(strip=True)
             if not title or len(title) < 10:
+                logger.debug(f"短いタイトルをスキップ: {title}")
                 continue
             
             # 著者情報の抽出（リンクの近くにある場合が多い）
@@ -305,8 +309,21 @@ class MediumDigestProcessorAsync:
                 date_processed=datetime.now().isoformat()
             )
             articles.append(article)
+            logger.debug(f"記事を検出: {title[:50]}... by {author}")
         
+        logger.info(f"合計{len(articles)}件の記事を抽出しました")
         return articles
+    
+    def _clean_url(self, url: str) -> str:
+        """URLをクリーンアップ（トラッキングパラメータ除去）"""
+        # URLからクエリパラメータを除去
+        clean_url = url.split('?')[0]
+        # 末尾のスラッシュを除去
+        clean_url = clean_url.rstrip('/')
+        # Mediumの特殊なパラメータを除去
+        if '#' in clean_url:
+            clean_url = clean_url.split('#')[0]
+        return clean_url
     
     async def fetch_article_content_async(self, url: str, retry_count: int = 3) -> tuple[str, Optional[str]]:
         """記事のコンテンツを非同期で取得（リトライ機能付き）"""
@@ -346,6 +363,8 @@ class MediumDigestProcessorAsync:
     async def generate_japanese_translation_and_summary_async(self, article: Article):
         """記事の日本語タイトル翻訳と要約を非同期で生成"""
         try:
+            logger.debug(f"記事処理開始: {article.title[:50]}... ({article.url})")
+            
             # 記事のコンテンツを非同期で取得
             text_content, author = await self.fetch_article_content_async(article.url)
             
@@ -353,6 +372,7 @@ class MediumDigestProcessorAsync:
                 article.author = author
             
             if not text_content:
+                logger.warning(f"記事コンテンツ取得失敗: {article.title[:50]}...")
                 article.japanese_title = "取得失敗"
                 article.japanese_summary = "記事の取得に失敗しました"
                 return
@@ -394,9 +414,14 @@ Example:
                 result = json.loads(response.message.content)
                 article.japanese_title = result.get('japanese_title', "翻訳失敗")
                 article.japanese_summary = result.get('japanese_summary', "要約失敗")
+                logger.debug(f"翻訳・要約完了: {article.japanese_title[:30]}...")
 
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON解析エラー ({article.title[:50]}...): {e}")
+            article.japanese_title = "翻訳失敗（JSON解析エラー）"
+            article.japanese_summary = "要約の生成に失敗しました"
         except Exception as e:
-            logger.error(f"翻訳・要約生成エラー ({article.title}): {e}")
+            logger.error(f"翻訳・要約生成エラー ({article.title[:50]}...): {e}")
             article.japanese_title = "翻訳失敗"
             article.japanese_summary = "要約の生成に失敗しました"
     
@@ -435,8 +460,14 @@ Example:
             logger.error(f"Slackへの送信エラー: {e}")
             return False
     
-    async def save_to_notion_async(self, article: Article, target_date: datetime, retry_count: int = 3):
-        """記事情報をNotionデータベースに非同期で保存（リトライ機能付き）"""
+    async def save_to_notion_async(self, article: Article, target_date: datetime, retry_count: int = 3) -> str:
+        """記事情報をNotionデータベースに非同期で保存（リトライ機能付き）
+        
+        Returns:
+            'success': 成功
+            'skipped': 既存のためスキップ
+            'failed': 失敗
+        """
         database_id = os.getenv('NOTION_DB_ID_DAILY_DIGEST')
         if not database_id:
             raise ValueError("NOTION_DATABASE_ID環境変数が設定されていません")
@@ -462,10 +493,14 @@ Example:
                     )
 
                     if existing['results']:
-                        logger.info(f"  -> 既に存在するためスキップ: {article.title}")
-                        return
+                        # 既存エントリの詳細情報を取得してログ出力
+                        existing_entry = existing['results'][0]
+                        existing_date = existing_entry.get('properties', {}).get('Date', {}).get('date', {}).get('start', 'Unknown')
+                        logger.info(f"  -> 既に存在するためスキップ: {article.title[:50]}... (既存日付: {existing_date})")
+                        return 'skipped'
 
                     # 新規ページ作成
+                    logger.info(f"  -> Notionに保存中: {article.title[:50]}...")
                     await loop.run_in_executor(
                         None,
                         lambda: self.notion_client.pages.create(
@@ -520,28 +555,36 @@ Example:
                         )
                     )
 
-                    logger.info(f"  -> 保存完了: {article.title}")
-                    return  # 成功したら終了
+                    logger.info(f"  -> 保存完了: {article.title[:50]}... by {article.author}")
+                    return 'success'  # 成功したら終了
 
                 except Exception as e:
                     if attempt < retry_count - 1:
                         wait_time = (attempt + 1) * 2  # 指数バックオフ
-                        logger.warning(f"  -> Notion保存エラー ({article.title}): {e}. {wait_time}秒後にリトライ...")
+                        logger.warning(f"  -> Notion保存エラー (試行 {attempt + 1}/{retry_count}): {article.title[:50]}...")
+                        logger.warning(f"     エラー詳細: {e}")
+                        logger.warning(f"     {wait_time}秒後にリトライします...")
                         await asyncio.sleep(wait_time)
                     else:
-                        logger.error(f"  -> Notion保存エラー ({article.title}): {e}. リトライ回数を超えました")
-                        raise
+                        logger.error(f"  -> Notion保存失敗 (全{retry_count}回試行): {article.title[:50]}...")
+                        logger.error(f"     最終エラー: {e}")
+                        return 'failed'
     
-    async def process_article_async(self, article: Article, target_date: datetime, save_notion: bool) -> Article:
-        """単一の記事を非同期で処理"""
+    async def process_article_async(self, article: Article, target_date: datetime, save_notion: bool) -> tuple[Article, str]:
+        """単一の記事を非同期で処理
+        
+        Returns:
+            (Article, status): 記事とNotionへの保存ステータス('success'/'skipped'/'failed'/None)
+        """
         # 翻訳と要約を生成
         await self.generate_japanese_translation_and_summary_async(article)
         
         # Notionに保存（有効な場合）
+        status = None
         if save_notion:
-            await self.save_to_notion_async(article, target_date)
+            status = await self.save_to_notion_async(article, target_date)
         
-        return article
+        return article, status
     
     async def process_daily_digest_async(self, target_date: datetime, save_notion: bool = True, send_slack: bool = True):
         """デイリーダイジェストの処理メイン関数"""
@@ -575,13 +618,20 @@ Example:
             return
 
         # 記事を並列処理で処理
-        logger.info(f"最大{MAX_CONCURRENT_ARTICLES}件の記事を並列処理します...")
+        logger.info(f"記事の翻訳と要約を開始します...")
+        logger.info(f"最大{MAX_CONCURRENT_ARTICLES}件の記事を並列処理します")
+        
+        # 統計の初期化
+        stats = {"success": 0, "skipped": 0, "failed": 0}
         
         # 記事をバッチに分割して処理
         processed_articles = []
+        total_batches = (len(articles) + MAX_CONCURRENT_ARTICLES - 1) // MAX_CONCURRENT_ARTICLES
+        
         for i in range(0, len(articles), MAX_CONCURRENT_ARTICLES):
             batch = articles[i:i + MAX_CONCURRENT_ARTICLES]
-            logger.info(f"バッチ {i//MAX_CONCURRENT_ARTICLES + 1}/{(len(articles) + MAX_CONCURRENT_ARTICLES - 1)//MAX_CONCURRENT_ARTICLES} を処理中...")
+            batch_num = i // MAX_CONCURRENT_ARTICLES + 1
+            logger.info(f"バッチ {batch_num}/{total_batches} を処理中 ({len(batch)}件)...")
             
             # バッチ内の記事を並列処理
             tasks = [
@@ -604,15 +654,36 @@ Example:
             for idx, result in enumerate(batch_results):
                 if isinstance(result, Exception):
                     logger.error(f"記事処理エラー: {batch[idx].title} - {result}")
+                    if save_notion:
+                        stats["failed"] += 1
                 else:
-                    processed_articles.append(result)
+                    article, status = result
+                    processed_articles.append(article)
+                    # 統計を更新
+                    if status == 'success':
+                        stats["success"] += 1
+                    elif status == 'skipped':
+                        stats["skipped"] += 1
+                    elif status == 'failed':
+                        stats["failed"] += 1
 
+        # 処理結果の詳細をログ出力
+        if save_notion:
+            logger.info("=" * 60)
+            logger.info(f"Notionへの保存結果:")
+            logger.info(f"  成功: {stats['success']}件")
+            logger.info(f"  スキップ (既存): {stats['skipped']}件")
+            logger.info(f"  失敗: {stats['failed']}件")
+            logger.info("=" * 60)
+        
         # Slackに送信
         if send_slack and processed_articles:
             slack_message = self.format_slack_message(processed_articles, date_str)
             await self.send_to_slack_async(slack_message)
 
-        logger.info(f"処理が完了しました（{len(processed_articles)}/{len(articles)}件成功）")
+        logger.info(f"処理が完了しました")
+        logger.info(f"  処理記事数: {len(processed_articles)}/{len(articles)}件")
+        logger.info(f"  対象日付: {date_str}")
 
 
 # グローバル変数でタスクを管理

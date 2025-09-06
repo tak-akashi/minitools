@@ -108,9 +108,14 @@ async def main_async():
         processed_articles = []
         
         logger.info(f"記事の翻訳と要約を開始します...")
-        for i, article in enumerate(articles, 1):
+        # バッチ処理のための設定
+        batch_size = 10  # 並列処理する記事数
+        total_batches = (len(articles) + batch_size - 1) // batch_size
+        
+        async def process_article(article, index, total):
+            """個別記事の処理"""
             try:
-                logger.debug(f"記事 {i}/{len(articles)}: {article.title[:50]}...")
+                logger.info(f"  記事 {index}/{total} 処理開始: {article.title[:50]}...")
                 # 記事内容を取得
                 content, author = await collector.fetch_article_content(article.url)
                 if author:
@@ -125,20 +130,43 @@ async def main_async():
                     )
                     article.japanese_title = result['japanese_title']
                     article.japanese_summary = result['japanese_summary']
+                    logger.info(f"  -> 翻訳・要約完了: {article.japanese_title[:30]}...")
+                else:
+                    logger.warning(f"  -> コンテンツ取得失敗: {article.title[:50]}...")
                 
                 # 辞書形式に変換
-                processed_articles.append({
+                return {
                     'title': article.title,
                     'url': article.url,
                     'author': article.author,
                     'japanese_title': article.japanese_title,
                     'japanese_summary': article.japanese_summary,
                     'date': target_date.strftime('%Y-%m-%d')
-                })
-                logger.debug(f"記事 {i} の処理完了")
-                
+                }
             except Exception as e:
-                logger.error(f"記事の処理エラー '{article.title}': {e}")
+                logger.error(f"  -> 処理エラー '{article.title[:50]}...': {e}")
+                return None
+        
+        # バッチごとに処理
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, len(articles))
+            batch = articles[start_idx:end_idx]
+            
+            logger.info(f"バッチ {batch_num + 1}/{total_batches} を処理中 ({len(batch)}件)...")
+            
+            # バッチ内の記事を並列処理
+            tasks = [
+                process_article(article, start_idx + i + 1, len(articles))
+                for i, article in enumerate(batch)
+            ]
+            
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # 成功した記事のみを追加
+            for result in batch_results:
+                if result and not isinstance(result, Exception):
+                    processed_articles.append(result)
     
     # Notionに保存
     if save_notion and processed_articles:
@@ -148,7 +176,12 @@ async def main_async():
                 logger.info(f"Notionに{len(processed_articles)}件の記事を保存中...")
                 publisher = NotionPublisher()
                 stats = await publisher.batch_save_articles(database_id, processed_articles)
-                logger.info(f"Notionへの保存完了: {stats}")
+                logger.info("=" * 60)
+                logger.info(f"Notionへの保存結果:")
+                logger.info(f"  成功: {stats.get('success', 0)}件")
+                logger.info(f"  スキップ (既存): {stats.get('skipped', 0)}件")
+                logger.info(f"  失敗: {stats.get('failed', 0)}件")
+                logger.info("=" * 60)
             except Exception as e:
                 logger.error(f"Notionへの保存エラー: {e}")
     
@@ -168,6 +201,9 @@ async def main_async():
                 logger.error(f"Slackへの送信エラー: {e}")
     
     logger.info("処理が完了しました")
+    if processed_articles:
+        logger.info(f"  処理記事数: {len(processed_articles)}件")
+        logger.info(f"  対象日付: {target_date.strftime('%Y-%m-%d')}")
 
 if __name__ == "__main__":
     main()

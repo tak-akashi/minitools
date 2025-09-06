@@ -183,13 +183,17 @@ class MediumCollector:
             if not url or url in seen_urls:
                 continue
             
-            # URLクリーンアップ
-            clean_url = url.split('?')[0]
+            # URLクリーンアップ（改善版）
+            clean_url = self._clean_url(url)
+            if clean_url in seen_urls:
+                logger.debug(f"重複URLをスキップ: {clean_url}")
+                continue
             seen_urls.add(clean_url)
             
             # タイトルと著者の抽出
             title = link.get_text(strip=True)
             if not title or len(title) < 10:
+                logger.debug(f"短いタイトルをスキップ: {title}")
                 continue
             
             # 著者情報の抽出
@@ -208,9 +212,29 @@ class MediumCollector:
                 date_processed=datetime.now().isoformat()
             )
             articles.append(article)
+            logger.debug(f"記事を検出: {title[:50]}... by {author}")
         
         logger.info(f"Parsed {len(articles)} articles from email")
         return articles
+    
+    def _clean_url(self, url: str) -> str:
+        """
+        URLをクリーンアップ（トラッキングパラメータ除去）
+        
+        Args:
+            url: クリーンアップするURL
+            
+        Returns:
+            クリーンアップされたURL
+        """
+        # URLからクエリパラメータを除去
+        clean_url = url.split('?')[0]
+        # 末尾のスラッシュを除去
+        clean_url = clean_url.rstrip('/')
+        # Mediumの特殊なパラメータを除去
+        if '#' in clean_url:
+            clean_url = clean_url.split('#')[0]
+        return clean_url
     
     async def fetch_article_content(self, url: str) -> tuple[str, Optional[str]]:
         """

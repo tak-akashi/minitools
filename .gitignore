@@ -644,6 +644,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+CLAUDE.md
+
 # Ignore Google API credentials and tokens
 script/credentials.json
 credentials.json

@@ -106,17 +106,25 @@ class NotionPublisher:
         # URLの重複チェック
         url = article_data.get('url')
         title = article_data.get('title', 'Unknown')
+        author = article_data.get('author', 'Unknown')
+        
         if url and await self.check_existing(database_id, url):
             logger.info(f"  -> 既に存在するためスキップ: {title[:50]}..." if len(title) > 50 else f"  -> 既に存在するためスキップ: {title}")
             return False
         
-        logger.info(f"  -> 保存中: {title[:50]}..." if len(title) > 50 else f"  -> 保存中: {title}")
+        logger.info(f"  -> Notionに保存中: {title[:50]}..." if len(title) > 50 else f"  -> Notionに保存中: {title}")
         
         # Notionプロパティの構築
         properties = self._build_article_properties(article_data)
         
         # ページ作成
         page_id = await self.create_page(database_id, properties)
+        
+        if page_id:
+            logger.info(f"  -> 保存完了: {title[:50]}... by {author}" if len(title) > 50 else f"  -> 保存完了: {title} by {author}")
+        else:
+            logger.error(f"  -> 保存失敗: {title[:50]}..." if len(title) > 50 else f"  -> 保存失敗: {title}")
+        
         return page_id is not None
     
     def _build_article_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -131,13 +139,13 @@ class NotionPublisher:
         """
         properties = {}
         
-        # タイトル (元の英語タイトル)
+        # タイトル (元の英語タイトルをメインのTitleに)
         if 'title' in article_data:
             properties['Title'] = {
                 "title": [{"text": {"content": article_data['title']}}]
             }
         
-        # 日本語タイトル (Japanese Title) - 旧スクリプトとの互換性のため
+        # 日本語タイトルをJapanese Titleに
         if 'japanese_title' in article_data:
             properties['Japanese Title'] = {
                 "rich_text": [{"text": {"content": article_data['japanese_title']}}]
@@ -147,10 +155,14 @@ class NotionPublisher:
         if 'url' in article_data:
             properties['URL'] = {"url": article_data['url']}
         
-        # 著者 (Author)
+        # 著者情報をAuthorプロパティに
         if 'author' in article_data:
             properties['Author'] = {
                 "rich_text": [{"text": {"content": article_data['author']}}]
+            }
+        elif 'source' in article_data:  # sourceがある場合はそれを使用
+            properties['Author'] = {
+                "rich_text": [{"text": {"content": article_data['source']}}]
             }
         
         # 要約
