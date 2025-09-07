@@ -50,7 +50,7 @@ class ArxivCollector:
         search_query = " AND ".join(queries)
         
         params = {
-            "search_query": search_query,
+            "search_query": f"all:{search_query} AND submittedDate:[{start_date}000000 TO {end_date}235959]",
             "start": 0,
             "max_results": max_results,
             "sortBy": "submittedDate",

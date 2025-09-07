@@ -155,7 +155,7 @@ async def main_async():
                 'source': alert.source,
                 'japanese_title': result['japanese_title'],
                 'japanese_summary': result['japanese_summary'],
-                'date': datetime.now().strftime('%Y-%m-%d')
+                'date': alert.email_date if alert.email_date else datetime.now().strftime('%Y-%m-%d')
             })
             
         except Exception as e:
@@ -169,7 +169,7 @@ async def main_async():
         if database_id:
             try:
                 logger.info(f"Notion保存開始: {len(processed_alerts)}件のアラートを保存中...")
-                publisher = NotionPublisher()
+                publisher = NotionPublisher(source_type='google_alerts')
                 stats = await publisher.batch_save_articles(database_id, processed_alerts)
                 logger.info(f"Notion保存完了: {stats}")
                 logger.info(f"  -> 成功: {stats.get('success', 0)}件")

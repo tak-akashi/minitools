@@ -16,21 +16,49 @@ logger = get_logger(__name__)
 class NotionPublisher:
     """Notionデータベースにコンテンツを保存するクラス"""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, source_type: Optional[str] = None):
         """
         Args:
             api_key: Notion APIキー（指定しない場合は環境変数から取得）
+            source_type: ソースタイプ（'arxiv', 'medium', 'google_alerts'）
         """
         self.api_key = api_key or os.getenv('NOTION_API_KEY')
         if not self.api_key:
             raise ValueError("NOTION_API_KEY is required")
         
+        self.source_type = source_type
         self.client = Client(auth=self.api_key)
-        logger.info("Notion client initialized")
+        logger.info(f"Notion client initialized (source_type: {source_type})")
+    
+    def _normalize_url_by_source(self, url: str) -> str:
+        """
+        ソースタイプに応じたURL正規化
+        
+        Args:
+            url: 正規化するURL
+            
+        Returns:
+            正規化されたURL
+        """
+        if self.source_type == 'arxiv':
+            # ArXiv固有の正規化（バージョン番号は保持）
+            url = url.replace("http://", "https://")
+            url = url.replace("export.arxiv.org", "arxiv.org")
+            logger.info(f"ArXiv URL normalized: {url}")
+        elif self.source_type == 'medium':
+            # Medium固有の正規化（パラメータ除去、末尾スラッシュ除去）
+            url = url.split('?')[0]
+            url = url.rstrip('/')
+            if '#' in url:
+                url = url.split('#')[0]
+            logger.debug(f"Medium URL normalized: {url}")
+        # google_alertsは正規化不要（元のURLのまま）
+        return url
     
     async def check_existing(self, database_id: str, url: str) -> bool:
         """
         URLが既にデータベースに存在するかチェック
+        HTTPSとHTTP両方のバージョンをチェックして過去データとの互換性を保つ
         
         Args:
             database_id: NotionデータベースID
@@ -40,27 +68,64 @@ class NotionPublisher:
             存在する場合True
         """
         try:
+            # ソースタイプに応じたURL正規化（HTTPS版）
+            normalized_url = self._normalize_url_by_source(url)
+            
+            logger.info(f"Checking URL in DB {database_id[:8]}... (source: {self.source_type})")
+            logger.info(f"  Original URL: {url}")
+            logger.info(f"  Normalized URL (HTTPS): {normalized_url}")
+            
             loop = asyncio.get_event_loop()
+            
+            # まずHTTPS版で検索
             result = await loop.run_in_executor(
                 None,
                 lambda: self.client.databases.query(
                     database_id=database_id,
                     filter={
                         "property": "URL",
-                        "url": {"equals": url}
+                        "url": {"equals": normalized_url}
                     }
                 )
             )
             
             exists = len(result.get('results', [])) > 0
+            logger.info(f"  HTTPS query result count: {len(result.get('results', []))}")
+            
+            # HTTPS版で見つからない場合、HTTP版でも検索（過去データとの互換性）
+            if not exists and self.source_type == 'arxiv' and normalized_url.startswith('https://'):
+                http_url = normalized_url.replace('https://', 'http://')
+                logger.info(f"  Checking HTTP version: {http_url}")
+                
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self.client.databases.query(
+                        database_id=database_id,
+                        filter={
+                            "property": "URL",
+                            "url": {"equals": http_url}
+                        }
+                    )
+                )
+                
+                exists = len(result.get('results', [])) > 0
+                logger.info(f"  HTTP query result count: {len(result.get('results', []))}")
+                
+                if exists:
+                    logger.info(f"  Found with HTTP protocol (legacy data)")
+            
             if exists:
-                logger.info(f"既に存在するためスキップ: {url}")
+                # 既存のエントリのURLも表示
+                existing_urls = [item.get('properties', {}).get('URL', {}).get('url', 'N/A') 
+                                for item in result.get('results', [])]
+                logger.info(f"  既存のURL: {existing_urls}")
+                logger.info(f"既に存在するためスキップ ({self.source_type}): {url}")
             else:
-                logger.debug(f"新規記事として処理: {url}")
+                logger.info(f"新規記事として処理 ({self.source_type}): {normalized_url}")
             return exists
             
         except Exception as e:
-            logger.error(f"重複チェックエラー: {e}")
+            logger.error(f"重複チェックエラー ({self.source_type}): {e}")
             return False
     
     async def create_page(self, database_id: str, properties: Dict[str, Any]) -> Optional[str]:
@@ -108,6 +173,7 @@ class NotionPublisher:
         title = article_data.get('title', 'Unknown')
         author = article_data.get('author', 'Unknown')
         
+        logger.info(f"  -> 重複チェック開始: {url}")
         if url and await self.check_existing(database_id, url):
             logger.info(f"  -> 既に存在するためスキップ: {title[:50]}..." if len(title) > 50 else f"  -> 既に存在するためスキップ: {title}")
             return False
@@ -136,6 +202,88 @@ class NotionPublisher:
             
         Returns:
             Notionプロパティ辞書
+        """
+        # source_typeに応じて適切なプロパティ構築メソッドを使用
+        if self.source_type == 'arxiv':
+            return self._build_arxiv_properties(article_data)
+        else:
+            return self._build_english_properties(article_data)
+    
+    def _build_arxiv_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ArXiv用の日本語プロパティを構築
+        
+        Args:
+            article_data: 記事データ
+            
+        Returns:
+            Notionプロパティ辞書（日本語プロパティ名）
+        """
+        properties = {}
+        
+        # タイトル（日本語プロパティ名）
+        if 'title' in article_data:
+            properties['タイトル'] = {
+                "title": [{"text": {"content": article_data['title']}}]
+            }
+        
+        # 公開日
+        if 'published' in article_data:
+            properties['公開日'] = {
+                "date": {"start": article_data['published'][:10]}  # YYYY-MM-DD形式
+            }
+        elif 'date' in article_data:
+            properties['公開日'] = {
+                "date": {"start": article_data['date']}
+            }
+        
+        # 更新日
+        if 'updated' in article_data:
+            properties['更新日'] = {
+                "date": {"start": article_data['updated'][:10]}
+            }
+        elif 'date' in article_data:
+            properties['更新日'] = {
+                "date": {"start": article_data['date']}
+            }
+        
+        # 概要（英語の要約）
+        if 'abstract' in article_data:
+            properties['概要'] = {
+                "rich_text": [{"text": {"content": article_data['abstract'][:2000]}}]
+            }
+        elif 'summary' in article_data:
+            properties['概要'] = {
+                "rich_text": [{"text": {"content": article_data['summary'][:2000]}}]
+            }
+        
+        # 日本語訳（翻訳された要約）
+        if 'japanese_summary' in article_data:
+            properties['日本語訳'] = {
+                "rich_text": [{"text": {"content": article_data['japanese_summary'][:2000]}}]
+            }
+        
+        # URL（正規化して保存）
+        if 'url' in article_data:
+            normalized_url = self._normalize_url_by_source(article_data['url'])
+            properties['URL'] = {"url": normalized_url}
+            logger.info(f"  Saving normalized URL: {normalized_url}")
+        elif 'pdf_url' in article_data:
+            normalized_url = self._normalize_url_by_source(article_data['pdf_url'])
+            properties['URL'] = {"url": normalized_url}
+            logger.info(f"  Saving normalized PDF URL: {normalized_url}")
+        
+        return properties
+    
+    def _build_english_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Medium/Google Alerts用の英語プロパティを構築
+        
+        Args:
+            article_data: 記事データ
+            
+        Returns:
+            Notionプロパティ辞書（英語プロパティ名）
         """
         properties = {}
         
@@ -200,7 +348,7 @@ class NotionPublisher:
         return properties
     
     async def batch_save_articles(self, database_id: str, articles: List[Dict[str, Any]], 
-                                 max_concurrent: int = 3) -> Dict[str, int]:
+                                 max_concurrent: int = 3) -> Dict[str, Any]:
         """
         複数の記事を並列でNotionに保存
         
@@ -210,28 +358,50 @@ class NotionPublisher:
             max_concurrent: 最大同時実行数
             
         Returns:
-            処理結果の統計（成功数、スキップ数、失敗数）
+            処理結果の統計と詳細（成功数、スキップ数、失敗数、および各記事のリスト）
         """
         semaphore = asyncio.Semaphore(max_concurrent)
         stats = {"success": 0, "skipped": 0, "failed": 0}
+        results = {"success": [], "skipped": [], "failed": []}
         
         async def save_with_semaphore(article):
             async with semaphore:
+                title = article.get('title', 'Unknown')
+                display_title = f"{title[:50]}..." if len(title) > 50 else title
+                
                 try:
                     result = await self.save_article(database_id, article)
                     if result:
                         stats["success"] += 1
+                        results["success"].append(display_title)
                     else:
                         stats["skipped"] += 1
+                        results["skipped"].append(display_title)
                 except Exception as e:
-                    title = article.get('title', 'Unknown')
-                    error_title = f"{title[:50]}..." if len(title) > 50 else title
-                    logger.error(f"記事の保存エラー '{error_title}': {e}")
+                    logger.error(f"記事の保存エラー '{display_title}': {e}")
                     stats["failed"] += 1
+                    results["failed"].append(display_title)
         
         # 全記事を並列処理
         tasks = [save_with_semaphore(article) for article in articles]
         await asyncio.gather(*tasks)
         
+        # 詳細な結果ログ
         logger.info(f"バッチ保存完了: 成功={stats['success']}, スキップ={stats['skipped']}, 失敗={stats['failed']}")
-        return stats
+        
+        if results["success"]:
+            logger.info("【成功した論文】")
+            for title in results["success"]:
+                logger.info(f"  ✓ {title}")
+        
+        if results["skipped"]:
+            logger.info("【スキップした論文（既存）】")
+            for title in results["skipped"]:
+                logger.info(f"  - {title}")
+        
+        if results["failed"]:
+            logger.info("【失敗した論文】")
+            for title in results["failed"]:
+                logger.info(f"  ✗ {title}")
+        
+        return {"stats": stats, "results": results}

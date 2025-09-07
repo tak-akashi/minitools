@@ -174,7 +174,7 @@ async def main_async():
         if database_id:
             try:
                 logger.info(f"Notionに{len(processed_articles)}件の記事を保存中...")
-                publisher = NotionPublisher()
+                publisher = NotionPublisher(source_type='medium')
                 stats = await publisher.batch_save_articles(database_id, processed_articles)
                 logger.info("=" * 60)
                 logger.info(f"Notionへの保存結果:")

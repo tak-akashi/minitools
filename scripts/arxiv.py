@@ -48,10 +48,10 @@ async def main_async():
                        help='基準日（YYYY-MM-DD形式）')
     parser.add_argument('--max-results', '-r', '--max_results', type=int, default=50, 
                        help='取得する最大論文数')
-    parser.add_argument('--no-notion', action='store_true', 
-                       help='Notion保存をスキップ')
-    parser.add_argument('--no-slack', action='store_true', 
-                       help='Slackへの投稿をスキップ')
+    parser.add_argument('--notion', action='store_true', 
+                       help='Notionへの保存のみ実行')
+    parser.add_argument('--slack', action='store_true', 
+                       help='Slackへの送信のみ実行')
     parser.add_argument('--debug', action='store_true',
                        help='デバッグモードで実行')
     
@@ -71,16 +71,31 @@ async def main_async():
     global logger
     logger = setup_logger("scripts.arxiv", log_file="arxiv.log", level=log_level)
     
+    # NotionPublisherのロガーも設定（同じログファイルとレベルを使用）
+    notion_logger = setup_logger("minitools.publishers.notion", log_file="arxiv.log", level=log_level)
+    
     # 日付範囲の設定（base_dateを基準に計算）
     base_date = datetime.strptime(args.date, "%Y-%m-%d")
-    start_date = base_date - timedelta(days=args.days - 1)
+    
+    # 月曜日かつ--daysが明示的に指定されていない場合は3日検索（土日分をカバー）
+    if base_date.weekday() == 0 and '--days' not in sys.argv:
+        effective_days = 3
+        logger.info("月曜日検索：土日分をカバーするため過去3日間を検索します")
+    else:
+        effective_days = args.days
+    
+    start_date = base_date - timedelta(days=effective_days - 1)
     end_date = base_date
+    
+    # フラグの処理
+    save_notion = not args.slack or args.notion
+    send_slack = not args.notion or args.slack
     
     # コレクターの初期化
     collector = ArxivCollector()
     
     # 論文を検索
-    logger.info(f"Searching max {args.max_results} papers from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} with queries: {args.keywords}")
+    logger.info(f"Searching max {args.max_results} papers from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} (effective_days: {effective_days}) with queries: {args.keywords}")
     papers = collector.search(
         queries=args.keywords,
         start_date=start_date.strftime("%Y%m%d"),
@@ -98,9 +113,12 @@ async def main_async():
     processed_papers = []
     
     if papers:  # 論文がある場合のみ処理
+        logger.info(f"翻訳・要約処理を開始: {len(papers)}件の論文を処理中...")
         async with collector:
-            for paper in papers:
+            for i, paper in enumerate(papers, 1):
                 try:
+                    logger.info(f"  論文処理中 ({i}/{len(papers)}): {paper['title'][:60]}...")
+                    
                     # タイトルと要約を翻訳
                     result = await translator.translate_with_summary(
                         title=paper['title'],
@@ -112,22 +130,33 @@ async def main_async():
                     paper['japanese_summary'] = result['japanese_summary']
                     processed_papers.append(paper)
                     
+                    logger.info(f"    -> 翻訳完了: {result['japanese_title'][:40]}...")
+                    
                 except Exception as e:
-                    logger.error(f"Error processing paper '{paper['title']}': {e}")
+                    logger.error(f"    -> 処理エラー ({i}/{len(papers)}): {paper['title'][:50]}... - {e}")
     
     # Notionに保存
-    if not args.no_notion and processed_papers:
+    if save_notion and processed_papers:
         database_id = os.getenv('NOTION_DB_ID')
         if database_id:
             try:
-                publisher = NotionPublisher()
-                stats = await publisher.batch_save_articles(database_id, processed_papers)
-                logger.info(f"Saved to Notion: {stats}")
+                logger.info(f"Notion保存開始: {len(processed_papers)}件の論文を保存中...")
+                publisher = NotionPublisher(source_type='arxiv')
+                result = await publisher.batch_save_articles(database_id, processed_papers)
+                stats = result.get('stats', {})
+                logger.info("=" * 60)
+                logger.info(f"Notion保存結果:")
+                logger.info(f"  成功: {stats.get('success', 0)}件")
+                logger.info(f"  スキップ (既存): {stats.get('skipped', 0)}件")
+                logger.info(f"  失敗: {stats.get('failed', 0)}件")
+                logger.info("=" * 60)
             except Exception as e:
-                logger.error(f"Error saving to Notion: {e}")
+                logger.error(f"Notion保存エラー: {e}")
+        else:
+            logger.warning("NOTION_DB_ID環境変数が設定されていません")
     
     # Slackに送信（論文が0件でも通知）
-    if not args.no_slack:
+    if send_slack:
         webhook_url = os.getenv('SLACK_WEBHOOK_URL')
         if webhook_url:
             try:

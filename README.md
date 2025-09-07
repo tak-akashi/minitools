@@ -183,8 +183,17 @@ uv run minitools-arxiv --keywords "LLM" "(RAG OR FINETUNING OR AGENT)" --days 30
 # 特定の日付を基準に検索
 uv run minitools-arxiv --date 2024-01-15 --days 7  # 1/9〜1/15の論文を検索
 
+# 月曜日実行：自動的に土日分もカバー（3日検索）
+uv run minitools-arxiv --keywords "LLM"
+
+# 月曜日でも手動指定は優先
+uv run minitools-arxiv --keywords "LLM" --days 5
+
 # Notionのみに保存
-uv run minitools-arxiv --no-slack
+uv run minitools-arxiv --notion
+
+# Slackのみに送信
+uv run minitools-arxiv --slack
 ```
 
 #### Medium Daily Digest
@@ -293,11 +302,16 @@ arXivから指定キーワードで論文を検索し、要約を日本語に翻
 
 **オプション**:
 - `--keywords`: 検索キーワード（複数指定可、デフォルト: "LLM" "(RAG OR FINETUNING OR AGENT)"）
-- `--days`: 何日前から検索するか（デフォルト: 1）
+- `--days`: 何日前から検索するか（デフォルト: 1、月曜日は自動的に3日に拡張）
 - `--date`: 基準日（YYYY-MM-DD形式、デフォルト: 昨日）
 - `--max-results`: 最大検索結果数（デフォルト: 50）
-- `--no-slack`: Slack送信をスキップ
-- `--no-notion`: Notion保存をスキップ
+- `--notion`: Notionへの保存のみ実行
+- `--slack`: Slackへの送信のみ実行
+
+**月曜日自動検索機能**:
+- 月曜日実行時は自動的に過去3日間を検索（土日提出分をカバー）
+- 手動で`--days`指定時はユーザー指定を優先
+- 火〜金曜日は従来通り1日検索で効率性を保持
 
 詳細: [docs/arxiv_async_usage.md](docs/arxiv_async_usage.md)
 

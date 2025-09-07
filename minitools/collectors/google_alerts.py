@@ -36,6 +36,7 @@ class Alert:
     japanese_summary: str = ""
     date_processed: str = ""
     article_content: str = ""
+    email_date: str = ""
     tags: List[str] = None
     
     def __post_init__(self):
@@ -173,6 +174,15 @@ class GoogleAlertsCollector:
         Returns:
             アラート情報のリスト
         """
+        # メール配信日時を取得
+        email_date_str = ""
+        if 'internalDate' in message:
+            jst = pytz.timezone('Asia/Tokyo')
+            email_timestamp = int(message['internalDate']) / 1000
+            email_date = datetime.fromtimestamp(email_timestamp, tz=jst)
+            email_date_str = email_date.strftime('%Y-%m-%d')
+            logger.debug(f"メール配信日時: {email_date} -> {email_date_str}")
+        
         # メール本文を取得
         body = self._extract_body(message)
         if not body:
@@ -245,7 +255,8 @@ class GoogleAlertsCollector:
                         url=actual_url,
                         source=source,
                         snippet=snippet,
-                        date_processed=datetime.now().isoformat()
+                        date_processed=datetime.now().isoformat(),
+                        email_date=email_date_str
                     )
                     alerts.append(alert)
                     
