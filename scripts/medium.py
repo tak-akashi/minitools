@@ -170,12 +170,14 @@ async def main_async():
     
     # Notionに保存
     if save_notion and processed_articles:
-        database_id = os.getenv('NOTION_DB_ID_DAILY_DIGEST')
+        # 環境変数名の統一（フォールバック対応）
+        database_id = os.getenv('NOTION_MEDIUM_DATABASE_ID') or os.getenv('NOTION_DB_ID_DAILY_DIGEST')
         if database_id:
             try:
                 logger.info(f"Notionに{len(processed_articles)}件の記事を保存中...")
                 publisher = NotionPublisher(source_type='medium')
-                stats = await publisher.batch_save_articles(database_id, processed_articles)
+                result = await publisher.batch_save_articles(database_id, processed_articles)
+                stats = result.get('stats', {})
                 logger.info("=" * 60)
                 logger.info(f"Notionへの保存結果:")
                 logger.info(f"  成功: {stats.get('success', 0)}件")
@@ -187,7 +189,8 @@ async def main_async():
     
     # Slackに送信
     if send_slack and processed_articles:
-        webhook_url = os.getenv('SLACK_WEBHOOK_URL_MEDIUM_DAILY_DIGEST')
+        # 環境変数名の統一（フォールバック対応）
+        webhook_url = os.getenv('SLACK_MEDIUM_WEBHOOK_URL') or os.getenv('SLACK_WEBHOOK_URL_MEDIUM_DAILY_DIGEST')
         if webhook_url:
             try:
                 async with SlackPublisher(webhook_url) as slack:

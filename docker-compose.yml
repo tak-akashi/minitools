@@ -1,0 +1,102 @@
+services:
+  # Main application container
+  minitools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-production}  # Use 'development' for whisper support
+    container_name: minitools
+    volumes:
+      # Mount configuration files
+      - ./settings.yaml:/app/settings.yaml:ro
+      - ./.env:/app/.env:ro
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.pickle:/app/token.pickle:rw
+      
+      # Mount output directories
+      - ./outputs:/app/outputs:rw
+      
+      # Mount source code for development (optional)
+      - ./minitools:/app/minitools:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - TZ=Asia/Tokyo
+    depends_on:
+      ollama-setup:
+        condition: service_completed_successfully
+    networks:
+      - minitools-network
+    stdin_open: true
+    tty: true
+
+  # Ollama server for LLM processing
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - minitools-network
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+        reservations:
+          memory: 16G
+    restart: unless-stopped
+
+  # One-time setup to download required models
+  ollama-setup:
+    image: ollama/ollama:latest
+    container_name: ollama-setup
+    volumes:
+      - ollama-data:/root/.ollama
+    depends_on:
+      - ollama
+    networks:
+      - minitools-network
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama server to start...' &&
+        sleep 10 &&
+        echo 'Pulling required models...' &&
+        ollama pull gemma3:27b || echo 'gemma3:27b download failed or already exists' &&
+        ollama pull gemma3:12b || echo 'gemma3:12b download failed or already exists' &&
+        echo 'Models setup complete!'
+      "
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+
+  # Optional: Jupyter notebook for interactive development
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: minitools-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/app:rw
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - minitools-network
+    command: >
+      sh -c "
+        pip install jupyter &&
+        jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+      "
+    profiles:
+      - development
+
+networks:
+  minitools-network:
+    driver: bridge
+
+volumes:
+  ollama-data:
+    driver: local

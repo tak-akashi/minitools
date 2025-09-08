@@ -165,24 +165,27 @@ async def main_async():
     
     # Notionに保存
     if save_notion and processed_alerts:
-        database_id = os.getenv('NOTION_DB_ID_GOOGLE_ALERTS')
+        # 環境変数名の統一（フォールバック対応）
+        database_id = os.getenv('NOTION_GOOGLE_ALERTS_DATABASE_ID') or os.getenv('NOTION_DB_ID_GOOGLE_ALERTS')
         if database_id:
             try:
                 logger.info(f"Notion保存開始: {len(processed_alerts)}件のアラートを保存中...")
                 publisher = NotionPublisher(source_type='google_alerts')
                 stats = await publisher.batch_save_articles(database_id, processed_alerts)
                 logger.info(f"Notion保存完了: {stats}")
-                logger.info(f"  -> 成功: {stats.get('success', 0)}件")
-                logger.info(f"  -> スキップ: {stats.get('skipped', 0)}件")
-                logger.info(f"  -> 失敗: {stats.get('failed', 0)}件")
+                stats_data = stats.get('stats', {})
+                logger.info(f"  -> 成功: {stats_data.get('success', 0)}件")
+                logger.info(f"  -> スキップ: {stats_data.get('skipped', 0)}件")
+                logger.info(f"  -> 失敗: {stats_data.get('failed', 0)}件")
             except Exception as e:
                 logger.error(f"Notion保存エラー: {e}")
         else:
-            logger.warning("NOTION_DB_ID_GOOGLE_ALERTS環境変数が設定されていません")
+            logger.warning("NOTION_GOOGLE_ALERTS_DATABASE_ID環境変数が設定されていません")
     
     # Slackに送信
     if send_slack and processed_alerts:
-        webhook_url = os.getenv('SLACK_WEBHOOK_URL_GOOGLE_ALERTS')
+        # 環境変数名の統一（フォールバック対応）
+        webhook_url = os.getenv('SLACK_GOOGLE_ALERTS_WEBHOOK_URL') or os.getenv('SLACK_WEBHOOK_URL_GOOGLE_ALERTS')
         if webhook_url:
             try:
                 logger.info(f"Slack送信開始: {len(processed_alerts)}件のアラートを送信中...")
@@ -195,7 +198,7 @@ async def main_async():
             except Exception as e:
                 logger.error(f"Slackへの送信エラー: {e}")
         else:
-            logger.warning("SLACK_WEBHOOK_URL_GOOGLE_ALERTS環境変数が設定されていません")
+            logger.warning("SLACK_GOOGLE_ALERTS_WEBHOOK_URL環境変数が設定されていません")
     
     logger.info("処理が完了しました")
 

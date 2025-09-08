@@ -37,7 +37,62 @@ minitools/
 
 ## インストール
 
-### 前提条件
+### 方法1: Docker を使用（推奨: Windows/Linux/Mac対応）
+
+Dockerを使用することで、すべてのプラットフォームで統一された環境で実行できます。
+
+#### 前提条件
+- Docker Desktop のインストール
+  - [Windows](https://docs.docker.com/desktop/install/windows-install/)
+  - [Mac](https://docs.docker.com/desktop/install/mac-install/)
+  - [Linux](https://docs.docker.com/desktop/install/linux-install/)
+
+#### セットアップ
+
+```bash
+# リポジトリのクローン
+git clone https://github.com/yourusername/minitools.git
+cd minitools
+
+# 環境変数の設定
+cp .env.docker.example .env
+# .env ファイルを編集してAPIキーを設定
+
+# Gmail認証ファイルをコピー（Medium/Google Alerts使用時）
+# credentials.json と token.pickle を配置
+
+# Dockerイメージのビルド
+docker-compose build
+
+# Ollamaモデルのセットアップ（初回のみ、自動実行）
+docker-compose up -d
+```
+
+#### 使用方法
+
+```bash
+# ArXiv論文の検索・翻訳
+docker-compose run minitools minitools-arxiv --keywords "LLM" "RAG"
+
+# Medium Daily Digestの処理
+docker-compose run minitools minitools-medium --date 2024-01-15
+
+# Google Alertsの処理
+docker-compose run minitools minitools-google-alerts --hours 12
+
+# YouTube動画の要約（whisper機能付きビルドが必要）
+BUILD_TARGET=development docker-compose build
+docker-compose run minitools minitools-youtube --url "https://youtube.com/watch?v=..."
+
+# インタラクティブシェル
+docker-compose run minitools bash
+
+# Jupyter Notebook（開発用）
+docker-compose --profile development up jupyter
+# http://localhost:8888 でアクセス
+```
+
+### 方法2: ローカルインストール
 
 このプロジェクトは[uv](https://github.com/astral-sh/uv)を使用してPython環境と依存関係を管理しています。uvはRustで実装された高速なPythonパッケージマネージャーです。
 
@@ -390,6 +445,42 @@ YouTube動画の音声を文字起こしし、要約を日本語で出力しま�
 
 ### Google Alerts追加
 - `Source` (Rich Text): ソース情報
+
+## Docker トラブルシューティング
+
+### Ollama接続エラー
+```bash
+# Ollamaサービスの状態確認
+docker-compose ps ollama
+
+# Ollamaログの確認
+docker-compose logs ollama
+
+# 接続テスト
+docker-compose run minitools test
+```
+
+### メモリ不足エラー
+```yaml
+# docker-compose.yml でメモリ制限を調整
+deploy:
+  resources:
+    limits:
+      memory: 32G  # 環境に応じて調整
+```
+
+### Gmail認証エラー
+```bash
+# ホストマシンで先に認証
+uv run minitools-medium --test
+
+# 生成された token.pickle をコンテナで使用
+docker-compose run minitools minitools-medium
+```
+
+### Windows固有の問題
+- WSL2を有効化してDocker Desktopを使用推奨
+- ファイルパス区切り文字の違いはDockerが自動処理
 
 ## トラブルシューティング
 

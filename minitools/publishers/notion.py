@@ -52,7 +52,14 @@ class NotionPublisher:
             if '#' in url:
                 url = url.split('#')[0]
             logger.debug(f"Medium URL normalized: {url}")
-        # google_alertsは正規化不要（元のURLのまま）
+        elif self.source_type == 'google_alerts':
+            # Google Alerts固有の正規化（パラメータ除去、末尾スラッシュ除去）
+            original_url = url
+            url = url.split('?')[0]  # トラッキングパラメータ除去
+            url = url.rstrip('/')     # 末尾スラッシュ除去
+            if '#' in url:
+                url = url.split('#')[0]  # フラグメント除去
+            logger.info(f"Google Alerts URL normalized: {original_url} -> {url}")
         return url
     
     async def check_existing(self, database_id: str, url: str) -> bool:
@@ -72,8 +79,8 @@ class NotionPublisher:
             normalized_url = self._normalize_url_by_source(url)
             
             logger.info(f"Checking URL in DB {database_id[:8]}... (source: {self.source_type})")
-            logger.info(f"  Original URL: {url}")
-            logger.info(f"  Normalized URL (HTTPS): {normalized_url}")
+            logger.debug(f"  Original URL: {url}")
+            logger.info(f"  Normalized URL: {normalized_url}")
             
             loop = asyncio.get_event_loop()
             
@@ -90,7 +97,7 @@ class NotionPublisher:
             )
             
             exists = len(result.get('results', [])) > 0
-            logger.info(f"  HTTPS query result count: {len(result.get('results', []))}")
+            logger.debug(f"  Query result count: {len(result.get('results', []))}")
             
             # HTTPS版で見つからない場合、HTTP版でも検索（過去データとの互換性）
             if not exists and self.source_type == 'arxiv' and normalized_url.startswith('https://'):
@@ -287,30 +294,37 @@ class NotionPublisher:
         """
         properties = {}
         
-        # タイトル (元の英語タイトルをメインのTitleに)
-        if 'title' in article_data:
+        # タイトル (日本語タイトルをメインのTitleに)
+        if 'japanese_title' in article_data:
+            properties['Title'] = {
+                "title": [{"text": {"content": article_data['japanese_title']}}]
+            }
+        elif 'title' in article_data:
+            # 日本語タイトルがない場合は英語タイトルを使用
             properties['Title'] = {
                 "title": [{"text": {"content": article_data['title']}}]
             }
         
-        # 日本語タイトルをJapanese Titleに
-        if 'japanese_title' in article_data:
-            properties['Japanese Title'] = {
-                "rich_text": [{"text": {"content": article_data['japanese_title']}}]
+        # 元の英語タイトルをOriginal Titleに
+        if 'title' in article_data:
+            properties['Original Title'] = {
+                "rich_text": [{"text": {"content": article_data['title']}}]
             }
         
         # URL
         if 'url' in article_data:
-            properties['URL'] = {"url": article_data['url']}
+            normalized_url = self._normalize_url_by_source(article_data['url'])
+            properties['URL'] = {"url": normalized_url}
+            logger.info(f"  Saving normalized URL: {normalized_url}")
         
-        # 著者情報をAuthorプロパティに
-        if 'author' in article_data:
-            properties['Author'] = {
-                "rich_text": [{"text": {"content": article_data['author']}}]
-            }
-        elif 'source' in article_data:  # sourceがある場合はそれを使用
-            properties['Author'] = {
+        # ソース情報をSourceプロパティに
+        if 'source' in article_data:
+            properties['Source'] = {
                 "rich_text": [{"text": {"content": article_data['source']}}]
+            }
+        elif 'author' in article_data:  # authorがある場合はそれを使用
+            properties['Source'] = {
+                "rich_text": [{"text": {"content": article_data['author']}}]
             }
         
         # 要約
@@ -329,15 +343,7 @@ class NotionPublisher:
                 "rich_text": [{"text": {"content": article_data['snippet']}}]
             }
         
-        # 日付
-        if 'date' in article_data:
-            properties['Date'] = {
-                "date": {"start": article_data['date']}
-            }
-        else:
-            properties['Date'] = {
-                "date": {"start": datetime.now().strftime("%Y-%m-%d")}
-            }
+        # Date は created_time型なので自動的に設定される（明示的な設定は不要）
         
         # タグ
         if 'tags' in article_data and isinstance(article_data['tags'], list):

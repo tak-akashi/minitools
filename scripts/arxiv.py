@@ -137,7 +137,8 @@ async def main_async():
     
     # Notionに保存
     if save_notion and processed_papers:
-        database_id = os.getenv('NOTION_DB_ID')
+        # 環境変数名の統一（フォールバック対応）
+        database_id = os.getenv('NOTION_ARXIV_DATABASE_ID') or os.getenv('NOTION_DB_ID')
         if database_id:
             try:
                 logger.info(f"Notion保存開始: {len(processed_papers)}件の論文を保存中...")
@@ -153,11 +154,12 @@ async def main_async():
             except Exception as e:
                 logger.error(f"Notion保存エラー: {e}")
         else:
-            logger.warning("NOTION_DB_ID環境変数が設定されていません")
+            logger.warning("NOTION_ARXIV_DATABASE_ID環境変数が設定されていません")
     
     # Slackに送信（論文が0件でも通知）
     if send_slack:
-        webhook_url = os.getenv('SLACK_WEBHOOK_URL')
+        # 環境変数名の統一（フォールバック対応）
+        webhook_url = os.getenv('SLACK_ARXIV_WEBHOOK_URL') or os.getenv('SLACK_WEBHOOK_URL')
         if webhook_url:
             try:
                 async with SlackPublisher(webhook_url) as slack:
