@@ -213,8 +213,13 @@ class NotionPublisher:
         # source_typeに応じて適切なプロパティ構築メソッドを使用
         if self.source_type == 'arxiv':
             return self._build_arxiv_properties(article_data)
+        elif self.source_type == 'medium':
+            return self._build_medium_properties(article_data)
+        elif self.source_type == 'google_alerts':
+            return self._build_google_alerts_properties(article_data)
         else:
-            return self._build_english_properties(article_data)
+            # デフォルトはGoogle Alerts形式
+            return self._build_google_alerts_properties(article_data)
     
     def _build_arxiv_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -282,9 +287,63 @@ class NotionPublisher:
         
         return properties
     
-    def _build_english_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_medium_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Medium/Google Alerts用の英語プロパティを構築
+        Medium用のプロパティを構築
+        
+        Args:
+            article_data: 記事データ
+            
+        Returns:
+            Notionプロパティ辞書
+        """
+        properties = {}
+        
+        # Title（英語タイトル）
+        if 'title' in article_data:
+            properties['Title'] = {
+                "title": [{"text": {"content": article_data['title']}}]
+            }
+        
+        # Japanese Title（日本語タイトル）
+        if 'japanese_title' in article_data:
+            properties['Japanese Title'] = {
+                "rich_text": [{"text": {"content": article_data['japanese_title']}}]
+            }
+        
+        # URL
+        if 'url' in article_data:
+            normalized_url = self._normalize_url_by_source(article_data['url'])
+            properties['URL'] = {"url": normalized_url}
+            logger.info(f"  Saving normalized URL: {normalized_url}")
+        
+        # Author（著者名）
+        if 'author' in article_data:
+            properties['Author'] = {
+                "rich_text": [{"text": {"content": article_data['author']}}]
+            }
+        
+        # Date（記事の日付）
+        if 'date' in article_data:
+            properties['Date'] = {
+                "date": {"start": article_data['date']}
+            }
+        
+        # Summary（日本語要約）
+        if 'japanese_summary' in article_data:
+            properties['Summary'] = {
+                "rich_text": [{"text": {"content": article_data['japanese_summary'][:2000]}}]
+            }
+        elif 'summary' in article_data:
+            properties['Summary'] = {
+                "rich_text": [{"text": {"content": article_data['summary'][:2000]}}]
+            }
+        
+        return properties
+    
+    def _build_google_alerts_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Google Alerts用のプロパティを構築
         
         Args:
             article_data: 記事データ
