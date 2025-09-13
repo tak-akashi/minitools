@@ -70,6 +70,38 @@ docker-compose up -d
 
 #### 使用方法
 
+**Makefileを使った実行（推奨）:**
+
+```bash
+# ArXiv論文の検索・翻訳
+make arxiv
+make arxiv --keywords "LLM" "RAG" --days 7
+make arxiv --date 2025-09-04 --max-results 100
+
+# Medium Daily Digestの処理
+make medium
+make medium --date 2024-01-15 --notion
+
+# Google Alertsの処理
+make google
+make google --hours 24
+
+# YouTube動画の要約
+make youtube --url https://youtube.com/watch?v=...
+
+# テストモード（1記事のみ処理）
+make arxiv-test
+make medium-test
+
+# その他の便利なコマンド
+make build        # Dockerイメージのビルド
+make shell        # インタラクティブシェル
+make jupyter      # Jupyter Notebook（開発用）
+make help         # 利用可能なコマンドの表示
+```
+
+**従来のdocker-composeコマンド:**
+
 ```bash
 # ArXiv論文の検索・翻訳
 docker-compose run minitools minitools-arxiv --keywords "LLM" "RAG"

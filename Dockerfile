@@ -1,6 +1,6 @@
 # Multi-stage build for minitools
 # Stage 1: Base dependencies
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,7 +21,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Stage 2: Development environment (includes all extras)
-FROM base as development
+FROM base AS development
 
 # Copy application code first (needed for local package build)
 COPY minitools ./minitools
@@ -39,7 +39,7 @@ RUN uv sync --extra whisper --no-editable
 RUN mkdir -p outputs/logs outputs/temp
 
 # Stage 3: Production environment (minimal dependencies)
-FROM base as production
+FROM base AS production
 
 # Copy application code first (needed for local package build)
 COPY minitools ./minitools
