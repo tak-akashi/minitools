@@ -41,14 +41,33 @@ minitools/
 
 Dockerを使用することで、すべてのプラットフォームで統一された環境で実行できます。
 
+> **📍 GPU対応について**: プラットフォームによってGPU設定が異なります。詳細は[GPU_SETUP.md](GPU_SETUP.md)を参照してください。
+
 #### 前提条件
 - Docker Desktop のインストール
   - [Windows](https://docs.docker.com/desktop/install/windows-install/)
   - [Mac](https://docs.docker.com/desktop/install/mac-install/)
   - [Linux](https://docs.docker.com/desktop/install/linux-install/)
 
-#### セットアップ
+#### クイックセットアップ（推奨）
 
+プラットフォーム別の自動セットアップスクリプトを用意しています：
+
+**macOS (Apple Silicon)**
+```bash
+# GPU（Metal/MPS）を使用するハイブリッド構成
+chmod +x setup-mac.sh
+./setup-mac.sh
+```
+
+**Windows (NVIDIA GPU)**
+```powershell
+# PowerShellを管理者として実行
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\setup-windows.ps1
+```
+
+**または手動セットアップ**
 ```bash
 # リポジトリのクローン
 git clone https://github.com/yourusername/minitools.git
@@ -61,11 +80,8 @@ cp .env.docker.example .env
 # Gmail認証ファイルをコピー（Medium/Google Alerts使用時）
 # credentials.json と token.pickle を配置
 
-# Dockerイメージのビルド
-docker-compose build
-
-# Ollamaモデルのセットアップ（初回のみ、自動実行）
-docker-compose up -d
+# プラットフォーム別のビルド
+make setup  # 自動的にOSを検出して適切な設定を使用
 ```
 
 #### 使用方法
@@ -75,23 +91,25 @@ docker-compose up -d
 ```bash
 # ArXiv論文の検索・翻訳
 make arxiv
-make arxiv --keywords "LLM" "RAG" --days 7
-make arxiv --date 2025-09-04 --max-results 100
+make -- arxiv --keywords "LLM" "RAG" --days 7
+make -- arxiv --date 2025-09-04 --max-results 100
 
 # Medium Daily Digestの処理
 make medium
-make medium --date 2024-01-15 --notion
+make -- medium --date 2024-01-15 --notion
 
 # Google Alertsの処理
 make google
-make google --hours 24
+make -- google --hours 24
 
 # YouTube動画の要約
-make youtube --url https://youtube.com/watch?v=...
+make -- youtube --url https://youtube.com/watch?v=...
 
 # テストモード（1記事のみ処理）
 make arxiv-test
 make medium-test
+
+# 注意: ダッシュで始まるオプションを使う場合は -- (ダブルダッシュ) を使用
 
 # その他の便利なコマンド
 make build        # Dockerイメージのビルド

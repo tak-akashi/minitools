@@ -1,0 +1,64 @@
+services:
+  # Main application container for macOS
+  # Note: Ollama should be run natively on macOS for GPU (Metal/MPS) support
+  minitools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${BUILD_TARGET:-production}  # Use 'development' for whisper support
+    container_name: minitools
+    volumes:
+      # Mount configuration files
+      - ./settings.yaml:/app/settings.yaml:ro
+      - ./.env:/app/.env:ro
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.pickle:/app/token.pickle:rw
+
+      # Mount output directories
+      - ./outputs:/app/outputs:rw
+
+      # Mount source code for development (optional)
+      - ./minitools:/app/minitools:ro
+      - ./scripts:/app/scripts:ro
+    environment:
+      # Connect to native Ollama running on host machine
+      # Ollama.app should be installed and running on your Mac
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - TZ=Asia/Tokyo
+    networks:
+      - minitools-network
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      # Allow container to connect to host's Ollama service
+      - "host.docker.internal:host-gateway"
+
+  # Optional: Jupyter notebook for interactive development
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: minitools-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./:/app:rw
+    environment:
+      # Connect to native Ollama running on host machine
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    networks:
+      - minitools-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      sh -c "
+        pip install jupyter &&
+        jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+      "
+    profiles:
+      - development
+
+networks:
+  minitools-network:
+    driver: bridge
