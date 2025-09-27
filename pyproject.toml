@@ -29,10 +29,10 @@ whisper = [
 ]
 
 [project.scripts]
-minitools-arxiv = "scripts.arxiv:main"
-minitools-medium = "scripts.medium:main"
-minitools-google-alerts = "scripts.google_alerts:main"
-minitools-youtube = "scripts.youtube:main"
+arxiv = "scripts.arxiv:main"
+medium = "scripts.medium:main"
+google-alerts = "scripts.google_alerts:main"
+youtube = "scripts.youtube:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

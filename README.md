@@ -261,7 +261,7 @@ uv add --dev pytest black ruff
 uv sync
 
 # スクリプトの実行（仮想環境を自動的に使用）
-uv run minitools-arxiv --keywords "machine learning"
+uv run arxiv --keywords "machine learning"
 
 # Pythonインタープリターの実行
 uv run python
@@ -283,61 +283,61 @@ uv pip list
 minitools-arxiv --keywords "LLM" "RAG" --days 7
 
 # uvを使った実行（仮想環境の有効化不要）
-uv run minitools-arxiv --keywords "LLM" "(RAG OR FINETUNING OR AGENT)" --days 30 --max-results 100
+uv run arxiv --keywords "LLM" "(RAG OR FINETUNING OR AGENT)" --days 30 --max-results 100
 
 # 特定の日付を基準に検索
-uv run minitools-arxiv --date 2024-01-15 --days 7  # 1/9〜1/15の論文を検索
+uv run arxiv --date 2024-01-15 --days 7  # 1/9〜1/15の論文を検索
 
 # 月曜日実行：自動的に土日分もカバー（3日検索）
-uv run minitools-arxiv --keywords "LLM"
+uv run arxiv --keywords "LLM"
 
 # 月曜日でも手動指定は優先
-uv run minitools-arxiv --keywords "LLM" --days 5
+uv run arxiv --keywords "LLM" --days 5
 
 # Notionのみに保存
-uv run minitools-arxiv --notion
+uv run arxiv --notion
 
 # Slackのみに送信
-uv run minitools-arxiv --slack
+uv run arxiv --slack
 ```
 
 #### Medium Daily Digest
 ```bash
 # 今日のダイジェストを処理
-minitools-medium
+medium
 # または
-uv run minitools-medium
+uv run medium
 
 # 特定の日付を処理
-uv run minitools-medium --date 2024-01-15
+uv run medium --date 2024-01-15
 
 # Notionのみに保存
-uv run minitools-medium --notion
+uv run medium --notion
 ```
 
 #### Google Alerts
 ```bash
 # 過去6時間のアラートを処理（デフォルト）
-minitools-google-alerts
+google-alerts
 # または
-uv run minitools-google-alerts
+uv run google-alerts
 
 # 過去12時間のアラートを処理
-uv run minitools-google-alerts --hours 12
+uv run google-alerts --hours 12
 
 # 特定の日付のアラートを処理
-uv run minitools-google-alerts --date 2024-01-15
+uv run google-alerts --date 2024-01-15
 ```
 
 #### YouTube要約
 ```bash
 # YouTube動画を要約（whisperオプションのインストールが必要）
-minitools-youtube --url "https://www.youtube.com/watch?v=..."
+youtube --url "https://www.youtube.com/watch?v=..."
 # または
-uv run minitools-youtube --url "https://www.youtube.com/watch?v=..."
+uv run youtube --url "https://www.youtube.com/watch?v=..."
 
 # 出力ディレクトリとモデルを指定
-uv run minitools-youtube --url "URL" --output_dir outputs --model_path mlx-community/whisper-large-v3-turbo
+uv run youtube --url "URL" --output_dir outputs --model_path mlx-community/whisper-large-v3-turbo
 ```
 
 ### Pythonモジュールとして使用
