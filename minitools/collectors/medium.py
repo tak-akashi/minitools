@@ -8,6 +8,7 @@ import base64
 import re
 import asyncio
 import aiohttp
+import cloudscraper
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -54,7 +55,28 @@ class MediumCollector:
         """非同期コンテキストマネージャーのエントリー"""
         connector = aiohttp.TCPConnector(limit=10)
         timeout = aiohttp.ClientTimeout(total=60, connect=30, sock_connect=30, sock_read=30)
-        self.http_session = aiohttp.ClientSession(connector=connector, timeout=timeout)
+
+        # ブラウザを模倣したヘッダー
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
+        }
+
+        self.http_session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers=headers
+        )
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -236,43 +258,68 @@ class MediumCollector:
             clean_url = clean_url.split('#')[0]
         return clean_url
     
-    async def fetch_article_content(self, url: str) -> tuple[str, Optional[str]]:
+    async def fetch_article_content(self, url: str, max_retries: int = 3) -> tuple[str, Optional[str]]:
         """
-        記事のコンテンツを非同期で取得
-        
+        記事のコンテンツを非同期で取得（Cloudflareバイパス対応）
+
         Args:
             url: 記事のURL
-            
+            max_retries: 最大リトライ回数
+
         Returns:
             (記事内容, 著者名) のタプル
         """
-        if not self.http_session:
-            logger.error("HTTP session not initialized. Use async context manager.")
-            return "", None
-            
-        try:
-            async with self.http_session.get(url) as response:
+        # リクエスト間の遅延（bot検出回避）
+        await asyncio.sleep(1)
+
+        def _fetch_with_cloudscraper(url: str) -> tuple[str, Optional[str]]:
+            """cloudscraperを使用して記事を取得（同期処理）"""
+            try:
+                scraper = cloudscraper.create_scraper(
+                    browser={
+                        'browser': 'chrome',
+                        'platform': 'darwin',
+                        'desktop': True
+                    }
+                )
+                response = scraper.get(url, timeout=30)
                 response.raise_for_status()
-                content = await response.text()
-                
-                soup = BeautifulSoup(content, 'html.parser')
-                
+
+                soup = BeautifulSoup(response.text, 'html.parser')
+
                 # 著者名を取得
                 author_tag = soup.find('a', attrs={'data-testid': 'authorName'})
                 author = author_tag.get_text(strip=True) if author_tag else None
-                
+
                 # 記事本文の抽出
                 article_body = soup.find('article')
                 if not article_body:
                     article_body = soup.find('div', class_='postArticle-content')
-                
+
                 text_content = article_body.get_text(separator=' ', strip=True)[:3000] if article_body else ""
-                
+
                 return text_content, author
-                
-        except Exception as e:
-            logger.error(f"Error fetching article from {url}: {e}")
-            return "", None
+
+            except Exception as e:
+                raise e
+
+        for attempt in range(max_retries):
+            try:
+                # cloudscraperは同期処理なので、executorで非同期実行
+                loop = asyncio.get_event_loop()
+                content, author = await loop.run_in_executor(None, _fetch_with_cloudscraper, url)
+                return content, author
+
+            except Exception as e:
+                wait_time = 2 ** attempt
+                if attempt < max_retries - 1:
+                    logger.warning(f"Error fetching {url}, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries}): {e}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Error fetching article from {url}: {e}")
+                    return "", None
+
+        return "", None
     
     def extract_email_body(self, message: Dict) -> str:
         """

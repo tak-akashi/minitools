@@ -20,6 +20,7 @@ dependencies = [
     "pytz>=2024.1",
     "yt-dlp>=2024.1.0",
     "brotli>=1.1.0",
+    "cloudscraper>=1.2.71",
 ]
 
 [project.optional-dependencies]
