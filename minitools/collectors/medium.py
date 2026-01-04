@@ -7,9 +7,8 @@ import pickle
 import base64
 import re
 import asyncio
+import random
 import aiohttp
-import cloudscraper
-from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from dataclasses import dataclass
@@ -29,6 +28,15 @@ logger = get_logger(__name__)
 # Gmail API スコープ
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
+# User-Agent ローテーション用リスト
+USER_AGENTS = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
+]
+
 
 @dataclass
 class Article:
@@ -36,6 +44,7 @@ class Article:
     title: str
     url: str
     author: str
+    preview: str = ""  # メールから抽出したプレビューテキスト
     japanese_title: str = ""
     summary: str = ""
     japanese_summary: str = ""
@@ -44,16 +53,16 @@ class Article:
 
 class MediumCollector:
     """Medium Daily Digestメールを収集するクラス"""
-    
+
     def __init__(self, credentials_path: str = None):
         self.gmail_service = None
         self.http_session = None
         self.credentials_path = credentials_path or os.getenv('GMAIL_CREDENTIALS_PATH', 'credentials.json')
         self._authenticate_gmail()
-    
+
     async def __aenter__(self):
         """非同期コンテキストマネージャーのエントリー"""
-        connector = aiohttp.TCPConnector(limit=10)
+        connector = aiohttp.TCPConnector(limit=5)  # 並列数を削減（bot検出回避）
         timeout = aiohttp.ClientTimeout(total=60, connect=30, sock_connect=30, sock_read=30)
 
         # ブラウザを模倣したヘッダー
@@ -204,37 +213,62 @@ class MediumCollector:
             url = link.get('href', '')
             if not url or url in seen_urls:
                 continue
-            
+
             # URLクリーンアップ（改善版）
             clean_url = self._clean_url(url)
             if clean_url in seen_urls:
                 logger.debug(f"重複URLをスキップ: {clean_url}")
                 continue
             seen_urls.add(clean_url)
-            
-            # タイトルと著者の抽出
-            title = link.get_text(strip=True)
+
+            # タイトルの抽出（h2タグから）
+            h2_tag = link.find('h2')
+            if h2_tag:
+                title = h2_tag.get_text(strip=True)
+            else:
+                title = link.get_text(strip=True)
+
             if not title or len(title) < 10:
                 logger.debug(f"短いタイトルをスキップ: {title}")
                 continue
-            
-            # 著者情報の抽出
+
+            # プレビューテキストの抽出（h3タグから）
+            preview = ""
+            h3_tag = link.find('h3')
+            if h3_tag:
+                preview = h3_tag.get_text(strip=True)
+                if preview and len(preview) > 20:
+                    preview = preview[:500]  # 500文字に制限
+                else:
+                    preview = ""
+
+            # 著者情報の抽出（great-grandparentから著者リンクを探す）
             author = "Unknown"
             parent = link.parent
-            if parent:
-                author_text = parent.get_text()
-                author_match = re.search(r'by\s+([^•\n]+)', author_text)
-                if author_match:
-                    author = author_match.group(1).strip()
-            
+            grandparent = parent.parent if parent else None
+            great_grandparent = grandparent.parent if grandparent else None
+
+            if great_grandparent:
+                # 著者リンクを探す（medium.com/@username パターン、テキストを持つもの）
+                author_links = great_grandparent.find_all('a', href=re.compile(r'medium\.com/@[^/]+\?'))
+                for author_link in author_links:
+                    if author_link == link:
+                        continue
+                    author_text = author_link.get_text(strip=True)
+                    # 有効な著者名: 空でなく、特定のパターンでない
+                    if author_text and len(author_text) > 1 and not author_text.startswith('@') and author_text != 'Member':
+                        author = author_text
+                        break
+
             article = Article(
                 title=title,
                 url=clean_url,
                 author=author,
+                preview=preview,
                 date_processed=datetime.now().isoformat()
             )
             articles.append(article)
-            logger.debug(f"記事を検出: {title[:50]}... by {author}")
+            logger.debug(f"記事を検出: {title[:50]}... by {author}, preview: {len(preview)} chars")
         
         logger.info(f"Parsed {len(articles)} articles from email")
         return articles
@@ -258,9 +292,123 @@ class MediumCollector:
             clean_url = clean_url.split('#')[0]
         return clean_url
     
+    def _extract_author_from_jina(self, content: str) -> Optional[str]:
+        """
+        Jina Readerの出力から著者名を抽出
+
+        Args:
+            content: Jina Readerから取得したテキスト
+
+        Returns:
+            著者名（見つからない場合はNone）
+        """
+        # 無効な著者名パターン
+        invalid_names = {
+            'sitemap', 'follow', 'share', 'menu', 'home', 'about', 'contact',
+            'sign in', 'sign up', 'login', 'register', 'subscribe', 'newsletter',
+            'privacy', 'terms', 'help', 'search', 'more', 'read more', 'continue',
+            'medium', 'member', 'membership', 'upgrade', 'get started',
+            'open in app', 'open app', 'get the app', 'download', 'install',
+            'write', 'read', 'listen', 'watch', 'see more', 'view more',
+            'responses', 'clap', 'claps', 'save', 'bookmark', 'copy link',
+            'published', 'edited', 'updated', 'posted', 'featured'
+        }
+
+        def clean_author_name(name: str) -> str:
+            """著者名からMarkdown構文などを除去"""
+            if not name:
+                return ""
+            # Markdown画像構文を除去: ![Image N: Author Name -> Author Name
+            name = re.sub(r'!\[Image\s*\d*:\s*', '', name)
+            # 閉じ括弧も除去
+            name = name.rstrip(']')
+            return name.strip()
+
+        def is_valid_author(name: str) -> bool:
+            if not name or len(name) < 3 or len(name) > 50:
+                return False
+            if name.lower() in invalid_names:
+                return False
+            # 著者名は通常大文字で始まる単語を含む
+            if not any(word[0].isupper() for word in name.split() if word):
+                return False
+            return True
+
+        lines = content.split('\n')
+
+        for i, line in enumerate(lines[:50]):  # 最初の50行を検索
+            line_stripped = line.strip()
+
+            # パターン1: "By Author Name" or "by Author Name"
+            if line_stripped.lower().startswith('by ') and len(line_stripped) > 3:
+                author = line_stripped[3:].strip()
+                # "By Author Name in Publication" のパターン
+                if ' in ' in author:
+                    author = author.split(' in ')[0].strip()
+                author = clean_author_name(author)
+                if is_valid_author(author):
+                    return author
+
+            # パターン2: "Author Name" の後に "Follow" がある行
+            if i + 1 < len(lines) and 'follow' in lines[i + 1].lower():
+                if line_stripped and not line_stripped.startswith('#'):
+                    author = clean_author_name(line_stripped)
+                    if is_valid_author(author):
+                        return author
+
+            # パターン3: Markdown リンク形式 [Author Name](url)
+            if line_stripped.startswith('[') and '](https://medium.com/@' in line_stripped:
+                match = re.match(r'\[([^\]]+)\]', line_stripped)
+                if match:
+                    author = clean_author_name(match.group(1))
+                    if is_valid_author(author):
+                        return author
+
+            # パターン4: "Written by Author" 形式
+            if 'written by ' in line_stripped.lower():
+                idx = line_stripped.lower().find('written by ')
+                author = clean_author_name(line_stripped[idx + 11:].strip())
+                if is_valid_author(author):
+                    return author
+
+            # パターン5: "Author Name · X min read" 形式
+            if ' min read' in line_stripped.lower():
+                match = re.match(r'^([A-Z][a-zA-Z\s\.]+?)(?:\s*·|\s+\d)', line_stripped)
+                if match:
+                    author = clean_author_name(match.group(1).strip())
+                    if is_valid_author(author):
+                        return author
+
+            # パターン6: Markdown リンク形式（一般的なURLパターン）
+            match = re.match(r'^\[([A-Z][a-zA-Z\s\.]+?)\]\(https?://[^\)]+\)$', line_stripped)
+            if match:
+                author = clean_author_name(match.group(1).strip())
+                if is_valid_author(author):
+                    return author
+
+        return None
+
+    def _extract_author_from_url(self, url: str) -> Optional[str]:
+        """
+        URLから著者名（ユーザー名）を抽出
+
+        Args:
+            url: Medium記事のURL
+
+        Returns:
+            著者のユーザー名（見つからない場合はNone）
+        """
+        # medium.com/@username/... のパターン
+        match = re.search(r'medium\.com/@([^/]+)', url)
+        if match:
+            username = match.group(1)
+            # アンダースコアやハイフンをスペースに置換して読みやすく
+            return f"@{username}"
+        return None
+
     async def fetch_article_content(self, url: str, max_retries: int = 3) -> tuple[str, Optional[str]]:
         """
-        記事のコンテンツを非同期で取得（Cloudflareバイパス対応）
+        記事のコンテンツをJina AI Readerで取得（ボット検出回避）
 
         Args:
             url: 記事のURL
@@ -269,49 +417,50 @@ class MediumCollector:
         Returns:
             (記事内容, 著者名) のタプル
         """
-        # リクエスト間の遅延（bot検出回避）
-        await asyncio.sleep(1)
+        # リクエスト間のランダム遅延
+        delay = random.uniform(1, 3)
+        await asyncio.sleep(delay)
 
-        def _fetch_with_cloudscraper(url: str) -> tuple[str, Optional[str]]:
-            """cloudscraperを使用して記事を取得（同期処理）"""
-            try:
-                scraper = cloudscraper.create_scraper(
-                    browser={
-                        'browser': 'chrome',
-                        'platform': 'darwin',
-                        'desktop': True
-                    }
-                )
-                response = scraper.get(url, timeout=30)
-                response.raise_for_status()
-
-                soup = BeautifulSoup(response.text, 'html.parser')
-
-                # 著者名を取得
-                author_tag = soup.find('a', attrs={'data-testid': 'authorName'})
-                author = author_tag.get_text(strip=True) if author_tag else None
-
-                # 記事本文の抽出
-                article_body = soup.find('article')
-                if not article_body:
-                    article_body = soup.find('div', class_='postArticle-content')
-
-                text_content = article_body.get_text(separator=' ', strip=True)[:3000] if article_body else ""
-
-                return text_content, author
-
-            except Exception as e:
-                raise e
+        # Jina AI Reader URL
+        jina_url = f"https://r.jina.ai/{url}"
 
         for attempt in range(max_retries):
             try:
-                # cloudscraperは同期処理なので、executorで非同期実行
-                loop = asyncio.get_event_loop()
-                content, author = await loop.run_in_executor(None, _fetch_with_cloudscraper, url)
-                return content, author
+                user_agent = random.choice(USER_AGENTS)
+                headers = {
+                    'User-Agent': user_agent,
+                    'Accept': 'text/plain',
+                }
+
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(jina_url, headers=headers, timeout=30) as response:
+                        if response.status == 200:
+                            text_content = await response.text()
+
+                            # Jinaがブロックされた場合を検出
+                            if 'error 403' in text_content.lower() or 'just a moment' in text_content.lower():
+                                logger.warning(f"Jina Reader blocked by Medium for {url}")
+                                return "", None
+
+                            # 著者名を抽出（複数パターン対応）
+                            author = self._extract_author_from_jina(text_content)
+                            # 注: URLフォールバックは使わない（メールから抽出した著者名を優先）
+
+                            # コンテンツを3000文字に制限
+                            text_content = text_content.strip()[:3000]
+
+                            if len(text_content) > 100:
+                                logger.debug(f"Jina Reader: {len(text_content)} chars, author: {author}")
+                                return text_content, author
+                            else:
+                                raise Exception("Content too short")
+
+                        else:
+                            raise Exception(f"HTTP {response.status}")
 
             except Exception as e:
                 wait_time = 2 ** attempt
+
                 if attempt < max_retries - 1:
                     logger.warning(f"Error fetching {url}, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries}): {e}")
                     await asyncio.sleep(wait_time)

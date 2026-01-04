@@ -44,9 +44,9 @@ async def main_async():
                        help='デバッグモードで実行')
     parser.add_argument('--test', action='store_true',
                        help='テストモード（最初の1記事のみ処理）')
-    
+
     args = parser.parse_args()
-    
+
     # 設定ファイルからデフォルトログレベルを取得
     config = get_config()
     default_log_level = config.get('logging.level', 'INFO').upper()
@@ -109,7 +109,7 @@ async def main_async():
         
         logger.info(f"記事の翻訳と要約を開始します...")
         # バッチ処理のための設定
-        batch_size = 10  # 並列処理する記事数
+        batch_size = 5  # 並列処理する記事数（bot検出回避のため削減）
         total_batches = (len(articles) + batch_size - 1) // batch_size
         
         async def process_article(article, index, total):
@@ -120,7 +120,12 @@ async def main_async():
                 content, author = await collector.fetch_article_content(article.url)
                 if author:
                     article.author = author
-                
+
+                # コンテンツ取得失敗時はメールのプレビューをフォールバックとして使用
+                if not content and article.preview:
+                    content = article.preview
+                    logger.info(f"  -> プレビューをフォールバックとして使用: {len(content)} chars")
+
                 # 翻訳と要約
                 if content:
                     result = await translator.translate_with_summary(
