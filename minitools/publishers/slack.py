@@ -2,8 +2,6 @@
 Slack publisher module for sending messages to Slack channels.
 """
 
-import json
-import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 

@@ -107,7 +107,7 @@ async def main_async():
         translator = Translator()
         processed_articles = []
         
-        logger.info(f"記事の翻訳と要約を開始します...")
+        logger.info("記事の翻訳と要約を開始します...")
         # バッチ処理のための設定
         batch_size = 5  # 並列処理する記事数（bot検出回避のため削減）
         total_batches = (len(articles) + batch_size - 1) // batch_size
@@ -184,7 +184,7 @@ async def main_async():
                 result = await publisher.batch_save_articles(database_id, processed_articles)
                 stats = result.get('stats', {})
                 logger.info("=" * 60)
-                logger.info(f"Notionへの保存結果:")
+                logger.info("Notionへの保存結果:")
                 logger.info(f"  成功: {stats.get('success', 0)}件")
                 logger.info(f"  スキップ (既存): {stats.get('skipped', 0)}件")
                 logger.info(f"  失敗: {stats.get('failed', 0)}件")

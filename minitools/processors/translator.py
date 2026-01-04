@@ -4,7 +4,7 @@ Translation processor using Ollama.
 
 import json
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 import ollama
 
 from minitools.utils.logger import get_logger

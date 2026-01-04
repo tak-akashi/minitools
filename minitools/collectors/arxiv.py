@@ -2,10 +2,9 @@
 ArXiv paper collector module.
 """
 
-import asyncio
 import aiohttp
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import feedparser
 import requests
 

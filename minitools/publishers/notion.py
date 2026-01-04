@@ -5,7 +5,6 @@ Notion publisher module for saving content to Notion databases.
 import os
 import asyncio
 from typing import Dict, Any, List, Optional
-from datetime import datetime
 from notion_client import Client
 
 from minitools.utils.logger import get_logger
@@ -119,7 +118,7 @@ class NotionPublisher:
                 logger.info(f"  HTTP query result count: {len(result.get('results', []))}")
                 
                 if exists:
-                    logger.info(f"  Found with HTTP protocol (legacy data)")
+                    logger.info("  Found with HTTP protocol (legacy data)")
             
             if exists:
                 # 既存のエントリのURLも表示

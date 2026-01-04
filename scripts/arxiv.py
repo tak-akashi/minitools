@@ -72,7 +72,7 @@ async def main_async():
     logger = setup_logger("scripts.arxiv", log_file="arxiv.log", level=log_level)
     
     # NotionPublisherのロガーも設定（同じログファイルとレベルを使用）
-    notion_logger = setup_logger("minitools.publishers.notion", log_file="arxiv.log", level=log_level)
+    # notion_logger = setup_logger("minitools.publishers.notion", log_file="arxiv.log", level=log_level)
     
     # 日付範囲の設定（base_dateを基準に計算）
     base_date = datetime.strptime(args.date, "%Y-%m-%d")
@@ -146,7 +146,7 @@ async def main_async():
                 result = await publisher.batch_save_articles(database_id, processed_papers)
                 stats = result.get('stats', {})
                 logger.info("=" * 60)
-                logger.info(f"Notion保存結果:")
+                logger.info("Notion保存結果:")
                 logger.info(f"  成功: {stats.get('success', 0)}件")
                 logger.info(f"  スキップ (既存): {stats.get('skipped', 0)}件")
                 logger.info(f"  失敗: {stats.get('failed', 0)}件")

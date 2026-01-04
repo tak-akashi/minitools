@@ -306,7 +306,6 @@ class GoogleAlertsCollector:
         import asyncio
         import aiohttp
         import random
-        import time
         
         # 複数のUser-Agentを用意
         user_agents = [
