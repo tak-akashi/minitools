@@ -119,6 +119,41 @@ class WeeklyDigestProcessor:
         logger.info(f"Ranking {len(articles)} articles by importance...")
         semaphore = asyncio.Semaphore(self.max_concurrent)
 
+        def safe_get_score(value: Any, default: int = 5) -> int:
+            """
+            スコア値を安全に取得（型チェックと変換）
+
+            Args:
+                value: スコア値（整数、文字列、Noneなど）
+                default: デフォルト値
+
+            Returns:
+                1-10の範囲の整数スコア
+            """
+            if value is None:
+                return default
+
+            # 整数型の場合はそのまま使用
+            if isinstance(value, int):
+                return max(1, min(10, value))  # 1-10の範囲に制限
+
+            # 文字列の場合は数値に変換を試みる
+            if isinstance(value, str):
+                try:
+                    # 数値文字列を変換
+                    num_value = float(value)
+                    return max(1, min(10, int(num_value)))
+                except (ValueError, TypeError):
+                    # 変換できない場合はデフォルト値
+                    return default
+
+            # 浮動小数点数の場合は整数に変換
+            if isinstance(value, float):
+                return max(1, min(10, int(value)))
+
+            # その他の型はデフォルト値
+            return default
+
         async def score_article(article: Dict[str, Any]) -> Dict[str, Any]:
             async with semaphore:
                 title = article.get("title", article.get("original_title", ""))
@@ -148,11 +183,12 @@ class WeeklyDigestProcessor:
                     result = json.loads(response)
 
                     # スコアを計算（4観点の平均）
+                    # 型安全にスコア値を取得
                     scores = [
-                        result.get("technical_impact", 5),
-                        result.get("industry_impact", 5),
-                        result.get("trending", 5),
-                        result.get("novelty", 5),
+                        safe_get_score(result.get("technical_impact"), 5),
+                        safe_get_score(result.get("industry_impact"), 5),
+                        safe_get_score(result.get("trending"), 5),
+                        safe_get_score(result.get("novelty"), 5),
                     ]
                     avg_score = sum(scores) / len(scores)
 
@@ -164,8 +200,10 @@ class WeeklyDigestProcessor:
                         f"Scored '{title[:40]}...': {article['importance_score']}"
                     )
 
-                except (json.JSONDecodeError, LLMError) as e:
-                    logger.warning(f"Failed to score article '{title[:40]}...': {e}")
+                except (json.JSONDecodeError, LLMError, TypeError, ValueError) as e:
+                    logger.warning(
+                        f"Failed to score article '{title[:40]}...': {type(e).__name__}: {e}"
+                    )
                     article["importance_score"] = 5  # デフォルトスコア
                     article["score_reason"] = "スコアリング失敗"
 
