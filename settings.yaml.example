@@ -3,7 +3,29 @@
 # セキュリティ関連の設定（APIキー等）は .env ファイルに記載してください
 
 # ========================================
-# Ollamaモデル設定
+# LLM抽象化レイヤー設定
+# ========================================
+llm:
+  # 使用するプロバイダー: "ollama" または "openai"
+  provider: "ollama"
+
+  # Ollama設定
+  ollama:
+    default_model: "gemma3:27b"
+    base_url: "http://localhost:11434"
+    models:
+      scoring: "gemma3:27b"        # 重要度スコアリング用
+      summarization: "gemma3:27b"  # 要約生成用
+
+  # OpenAI設定（OPENAI_API_KEY環境変数が必要）
+  openai:
+    default_model: "gpt-4o-mini"
+    models:
+      scoring: "gpt-4o-mini"       # 重要度スコアリング用
+      summarization: "gpt-4o-mini" # 要約生成用
+
+# ========================================
+# Ollamaモデル設定（従来の翻訳・要約用）
 # ========================================
 models:
   # ArXiv論文、Google Alerts、Medium記事の翻訳・要約用
@@ -12,7 +34,7 @@ models:
   summarization: "gemma3:27b"
   
   # YouTube動画の要約用（より軽量なモデル）
-  youtube_summary: "gemma2"
+  youtube_summary: "gemma3:12b"
 
 # ========================================
 # 処理設定
@@ -56,6 +78,21 @@ defaults:
     whisper_model: "mlx-community/whisper-large-v3-turbo"  # Whisperモデル
     audio_quality: "192"           # 音声品質（kbps）
     temp_dir: "outputs/temp"       # 一時ファイルディレクトリ
+
+  # 週次ダイジェスト
+  weekly_digest:
+    days_back: 7                   # 集計対象の日数
+    top_articles: 20               # 上位記事数
+
+# ========================================
+# 週次ダイジェスト設定
+# ========================================
+weekly_digest:
+  deduplication:
+    enabled: true                  # 類似記事の重複除去を行うか
+    similarity_threshold: 0.85    # 類似度閾値（0.0-1.0）
+    buffer_ratio: 2.5              # 重複除去時の候補記事倍率
+    embedding_model: "nomic-embed-text"  # Embeddingモデル（Ollama用）
 
 # ========================================
 # ログ設定

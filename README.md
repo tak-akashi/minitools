@@ -22,16 +22,27 @@ minitools/
 │   │   ├── medium.py      # Medium Daily Digest収集
 │   │   ├── google_alerts.py  # Google Alerts収集
 │   │   └── youtube.py     # YouTube動画処理
+│   ├── llm/               # LLM抽象化レイヤー
+│   │   ├── base.py        # 基底クラス
+│   │   ├── embeddings.py  # Embedding抽象化
+│   │   ├── langchain_ollama.py  # LangChain Ollama
+│   │   └── langchain_openai.py  # LangChain OpenAI
+│   ├── readers/           # データ読み取りモジュール
+│   │   └── notion.py      # Notionデータベース読み取り
 │   ├── processors/        # データ処理モジュール
 │   │   ├── translator.py  # 翻訳処理
-│   │   └── summarizer.py  # 要約処理
+│   │   ├── summarizer.py  # 要約処理
+│   │   ├── weekly_digest.py    # 週次ダイジェスト生成
+│   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/        # 出力先モジュール
 │   │   ├── notion.py      # Notion連携
 │   │   └── slack.py       # Slack連携
 │   └── utils/             # ユーティリティ
+│       ├── config.py      # 設定管理
 │       └── logger.py      # カラー対応ロギング
 ├── scripts/               # 実行可能スクリプト
 ├── docs/                  # ドキュメント
+│   └── generated/         # 生成ドキュメント
 └── outputs/               # 出力ファイル
 ```
 
@@ -40,8 +51,6 @@ minitools/
 ### 方法1: Docker を使用（推奨: Windows/Linux/Mac対応）
 
 Dockerを使用することで、すべてのプラットフォームで統一された環境で実行できます。
-
-> **📍 GPU対応について**: プラットフォームによってGPU設定が異なります。詳細は[GPU_SETUP.md](GPU_SETUP.md)を参照してください。
 
 #### 前提条件
 - Docker Desktop のインストール
@@ -122,17 +131,20 @@ make help         # 利用可能なコマンドの表示
 
 ```bash
 # ArXiv論文の検索・翻訳
-docker-compose run minitools minitools-arxiv --keywords "LLM" "RAG"
+docker-compose run minitools arxiv --keywords "LLM" "RAG"
 
 # Medium Daily Digestの処理
-docker-compose run minitools minitools-medium --date 2024-01-15
+docker-compose run minitools medium --date 2024-01-15
 
 # Google Alertsの処理
-docker-compose run minitools minitools-google-alerts --hours 12
+docker-compose run minitools google-alerts --hours 12
+
+# 週次AIダイジェスト
+docker-compose run minitools weekly-digest --days 7 --top 20
 
 # YouTube動画の要約（whisper機能付きビルドが必要）
 BUILD_TARGET=development docker-compose build
-docker-compose run minitools minitools-youtube --url "https://youtube.com/watch?v=..."
+docker-compose run minitools youtube --url "https://youtube.com/watch?v=..."
 
 # インタラクティブシェル
 docker-compose run minitools bash
@@ -280,64 +292,78 @@ uv pip list
 #### ArXiv論文検索
 ```bash
 # 基本的な使い方（仮想環境有効化済み）
-minitools-arxiv --keywords "LLM" "RAG" --days 7
+arxiv --keywords "LLM" "RAG" --days 7
 
 # uvを使った実行（仮想環境の有効化不要）
-uv run minitools-arxiv --keywords "LLM" "(RAG OR FINETUNING OR AGENT)" --days 30 --max-results 100
+uv run arxiv --keywords "LLM" "(RAG OR FINETUNING OR AGENT)" --days 30 --max-results 100
 
 # 特定の日付を基準に検索
-uv run minitools-arxiv --date 2024-01-15 --days 7  # 1/9〜1/15の論文を検索
+uv run arxiv --date 2024-01-15 --days 7  # 1/9〜1/15の論文を検索
 
 # 月曜日実行：自動的に土日分もカバー（3日検索）
-uv run minitools-arxiv --keywords "LLM"
+uv run arxiv --keywords "LLM"
 
 # 月曜日でも手動指定は優先
-uv run minitools-arxiv --keywords "LLM" --days 5
+uv run arxiv --keywords "LLM" --days 5
 
 # Notionのみに保存
-uv run minitools-arxiv --notion
+uv run arxiv --notion
 
 # Slackのみに送信
-uv run minitools-arxiv --slack
+uv run arxiv --slack
 ```
 
 #### Medium Daily Digest
 ```bash
 # 今日のダイジェストを処理
-minitools-medium
+medium
 # または
-uv run minitools-medium
+uv run medium
 
 # 特定の日付を処理
-uv run minitools-medium --date 2024-01-15
+uv run medium --date 2024-01-15
 
 # Notionのみに保存
-uv run minitools-medium --notion
+uv run medium --notion
 ```
 
 #### Google Alerts
 ```bash
 # 過去6時間のアラートを処理（デフォルト）
-minitools-google-alerts
+google-alerts
 # または
-uv run minitools-google-alerts
+uv run google-alerts
 
 # 過去12時間のアラートを処理
-uv run minitools-google-alerts --hours 12
+uv run google-alerts --hours 12
 
 # 特定の日付のアラートを処理
-uv run minitools-google-alerts --date 2024-01-15
+uv run google-alerts --date 2024-01-15
+```
+
+#### 週次AIダイジェスト
+```bash
+# 過去7日間の上位20記事をSlackに送信
+weekly-digest
+# または
+uv run weekly-digest --days 7 --top 20
+
+# プレビュー（Slackに送信しない）
+uv run weekly-digest --dry-run
+
+# 重複除去を無効化
+uv run weekly-digest --no-deduplicate
 ```
 
 #### YouTube要約
 ```bash
 # YouTube動画を要約（whisperオプションのインストールが必要）
-minitools-youtube --url "https://www.youtube.com/watch?v=..."
+youtube --url "https://www.youtube.com/watch?v=..."
 # または
-uv run minitools-youtube --url "https://www.youtube.com/watch?v=..."
+uv run youtube --url "https://www.youtube.com/watch?v=..."
 
 # 出力ディレクトリとモデルを指定
-uv run minitools-youtube --url "URL" --output_dir outputs --model_path mlx-community/whisper-large-v3-turbo
+uv run youtube --url "URL" --output_dir outputs --model_path mlx-community/whisper-large-v3-turbo
 ```
 
 ### Pythonモジュールとして使用
@@ -418,7 +444,7 @@ arXivから指定キーワードで論文を検索し、要約を日本語に翻
 - 手動で`--days`指定時はユーザー指定を優先
 - 火〜金曜日は従来通り1日検索で効率性を保持
 
-詳細: [docs/arxiv_async_usage.md](docs/arxiv_async_usage.md)
+詳細: [docs/generated/architecture.md](docs/generated/architecture.md)
 
 ### Medium Daily Digest
 
@@ -436,7 +462,7 @@ Gmail経由で受信したMedium Daily Digestメールから記事を抽出し�
 - `--notion`: Notion保存のみ
 - `--slack`: Slack送信のみ
 
-詳細: [docs/medium_daily_digest_async_usage.md](docs/medium_daily_digest_async_usage.md)
+詳細: [docs/generated/architecture.md](docs/generated/architecture.md)
 
 ### Google Alerts
 
@@ -456,10 +482,32 @@ Google Alertsメールから各アラートを抽出し、日本語要約を付�
 **定期実行の設定例（cron）**:
 ```bash
 # 6時間ごとに実行（uvを使用）
-0 */6 * * * cd /path/to/minitools && /path/to/uv run minitools-google-alerts
+0 */6 * * * cd /path/to/minitools && /path/to/uv run google-alerts
 
 # または仮想環境を直接指定
-0 */6 * * * cd /path/to/minitools && .venv/bin/minitools-google-alerts
+0 */6 * * * cd /path/to/minitools && .venv/bin/google-alerts
+```
+
+### 週次AIダイジェスト
+
+NotionのGoogle Alertsデータベースから過去1週間の記事を取得し、AIが重要度を判定して上位記事を選出。週のトレンド総括と各記事の要約をSlackに送信します。
+
+**特徴**:
+- LLMによる重要度スコアリング（技術的影響、業界への影響等を評価）
+- Embeddingベースの類似記事検出・重複除去
+- 週のトレンド総括を自動生成
+- Ollama/OpenAI両対応（LLM抽象化レイヤー）
+
+**オプション**:
+- `--days`: 集計対象の日数（デフォルト: 7）
+- `--top`: 上位記事数（デフォルト: 20）
+- `--dry-run`: プレビューモード（Slackに送信しない）
+- `--no-deduplicate`: 重複除去を無効化
+
+**定期実行の設定例（cron）**:
+```bash
+# 毎週月曜日9時に実行
+0 9 * * 1 cd /path/to/minitools && /path/to/uv run weekly-digest
 ```
 
 ### YouTube要約ツール
@@ -524,10 +572,10 @@ deploy:
 ### Gmail認証エラー
 ```bash
 # ホストマシンで先に認証
-uv run minitools-medium --test
+uv run medium --test
 
 # 生成された token.pickle をコンテナで使用
-docker-compose run minitools minitools-medium
+docker-compose run minitools medium
 ```
 
 ### Windows固有の問題
@@ -586,20 +634,6 @@ tail -f outputs/logs/arxiv.log
 tail -f outputs/logs/medium_daily_digest.log
 tail -f outputs/logs/google_alerts.log
 tail -f outputs/logs/youtube.log
-```
-
-### カスタムモジュールの作成
-```python
-from minitools.collectors import BaseCollector
-from minitools.utils import setup_logger
-
-class MyCollector(BaseCollector):
-    def __init__(self):
-        self.logger = setup_logger(__name__)
-    
-    def collect(self):
-        # カスタム収集ロジック
-        pass
 ```
 
 ### uvの便利なコマンド

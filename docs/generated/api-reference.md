@@ -1,0 +1,1622 @@
+# APIリファレンス
+
+このドキュメントは、minitoolsプロジェクトの各クラス、関数、データ構造のリファレンスです。
+
+## Collectors
+
+### ArxivCollector
+
+ArXiv論文を収集するクラス。
+
+**ファイル:** `minitools/collectors/arxiv.py`
+
+```python
+class ArxivCollector:
+    """ArXiv論文を収集するクラス"""
+
+    def __init__(self):
+        """
+        コンストラクタ
+
+        Attributes:
+            base_url (str): ArXiv APIのベースURL
+            http_session (aiohttp.ClientSession): HTTPセッション
+        """
+
+    async def __aenter__(self) -> 'ArxivCollector':
+        """非同期コンテキストマネージャーのエントリー"""
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """非同期コンテキストマネージャーのクリーンアップ"""
+
+    def search(
+        self,
+        queries: List[str],
+        start_date: str,
+        end_date: str,
+        max_results: int = 50
+    ) -> List[Dict[str, str]]:
+        """
+        arXiv APIを使用して論文を検索
+
+        Args:
+            queries: 検索語のリスト
+            start_date: 検索開始日（YYYYMMDD形式）
+            end_date: 検索終了日（YYYYMMDD形式）
+            max_results: 取得する最大結果数
+
+        Returns:
+            検索結果の論文情報のリスト
+            各論文: {title, url, abstract, authors, published, pdf_url}
+        """
+
+    async def fetch_paper_details_async(
+        self,
+        paper_url: str
+    ) -> Optional[str]:
+        """
+        論文の詳細を非同期で取得
+
+        Args:
+            paper_url: 論文のURL
+
+        Returns:
+            論文の詳細テキスト
+        """
+```
+
+**使用例:**
+```python
+async with ArxivCollector() as collector:
+    papers = collector.search(
+        queries=["LLM", "RAG"],
+        start_date="20240101",
+        end_date="20240115",
+        max_results=50
+    )
+```
+
+---
+
+### MediumCollector
+
+Medium Daily Digestメールを収集するクラス。
+
+**ファイル:** `minitools/collectors/medium.py`
+
+```python
+class MediumCollector:
+    """Medium Daily Digestメールを収集するクラス"""
+
+    def __init__(self, credentials_path: str = None):
+        """
+        コンストラクタ
+
+        Args:
+            credentials_path: Gmail API認証ファイルパス（デフォルト: credentials.json）
+
+        Attributes:
+            gmail_service: Gmail APIサービスオブジェクト
+            http_session: aiohttpセッション
+        """
+
+    async def __aenter__(self) -> 'MediumCollector':
+        """非同期コンテキストマネージャーのエントリー"""
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """非同期コンテキストマネージャーのクリーンアップ"""
+
+    async def get_digest_emails(
+        self,
+        date: Optional[datetime] = None
+    ) -> List[Dict]:
+        """
+        Medium Daily Digestメールを取得
+
+        Args:
+            date: 取得する日付（指定しない場合は今日）
+
+        Returns:
+            メールメッセージのリスト
+        """
+
+    def parse_articles(self, html_content: str) -> List[Article]:
+        """
+        メールHTMLから記事情報を抽出
+
+        Args:
+            html_content: メールのHTML内容
+
+        Returns:
+            Article データクラスのリスト
+        """
+
+    async def fetch_article_content(
+        self,
+        url: str,
+        max_retries: int = 3
+    ) -> tuple[str, Optional[str]]:
+        """
+        記事のコンテンツをJina AI Readerで取得
+
+        Args:
+            url: 記事のURL
+            max_retries: 最大リトライ回数
+
+        Returns:
+            (記事内容, 著者名) のタプル
+        """
+
+    def extract_email_body(self, message: Dict) -> str:
+        """
+        メールメッセージから本文を抽出
+
+        Args:
+            message: Gmail APIのメッセージオブジェクト
+
+        Returns:
+            メール本文のHTML
+        """
+```
+
+**使用例:**
+```python
+async with MediumCollector() as collector:
+    messages = await collector.get_digest_emails(datetime.now())
+    email_body = collector.extract_email_body(messages[0])
+    articles = collector.parse_articles(email_body)
+
+    for article in articles:
+        content, author = await collector.fetch_article_content(article.url)
+```
+
+---
+
+### GoogleAlertsCollector
+
+Google Alertsメールを収集するクラス。
+
+**ファイル:** `minitools/collectors/google_alerts.py`
+
+```python
+class GoogleAlertsCollector:
+    """Google Alertsメールを収集するクラス"""
+
+    def __init__(self, credentials_path: str = None):
+        """
+        コンストラクタ
+
+        Args:
+            credentials_path: Gmail API認証ファイルパス
+        """
+
+    def get_alerts_emails(
+        self,
+        hours_back: int = 6,
+        date: Optional[datetime] = None
+    ) -> List[Dict]:
+        """
+        Google Alertsメールを取得
+
+        Args:
+            hours_back: 何時間前までのメールを取得するか
+            date: 特定の日付のメールを取得
+
+        Returns:
+            メールメッセージのリスト
+        """
+
+    def parse_alerts(self, message: Dict) -> List[Alert]:
+        """
+        メールからアラート情報を抽出
+
+        Args:
+            message: Gmail APIのメッセージオブジェクト
+
+        Returns:
+            Alert データクラスのリスト
+        """
+
+    async def fetch_article_content(
+        self,
+        url: str,
+        retry_count: int = 3
+    ) -> str:
+        """
+        URLから記事の本文を取得
+
+        Args:
+            url: 記事のURL
+            retry_count: リトライ回数
+
+        Returns:
+            記事の本文（最大3000文字）
+        """
+
+    async def fetch_articles_for_alerts(
+        self,
+        alerts: List[Alert]
+    ) -> None:
+        """
+        複数のアラートの記事本文を並列で取得
+
+        Args:
+            alerts: アラートのリスト（article_contentが更新される）
+        """
+```
+
+**使用例:**
+```python
+collector = GoogleAlertsCollector()
+emails = collector.get_alerts_emails(hours_back=6)
+
+all_alerts = []
+for email in emails:
+    alerts = collector.parse_alerts(email)
+    all_alerts.extend(alerts)
+
+await collector.fetch_articles_for_alerts(all_alerts)
+```
+
+---
+
+### YouTubeCollector
+
+YouTube動画を収集して文字起こしするクラス。
+
+**ファイル:** `minitools/collectors/youtube.py`
+
+```python
+class YouTubeCollector:
+    """YouTube動画を収集して文字起こしするクラス"""
+
+    def __init__(
+        self,
+        output_dir: str = "outputs/temp",
+        whisper_model: str = "mlx-community/whisper-base"
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            output_dir: 一時ファイルの出力ディレクトリ
+            whisper_model: 使用するWhisperモデル
+        """
+
+    def download_audio(self, url: str) -> Optional[str]:
+        """
+        YouTubeから音声をダウンロード
+
+        Args:
+            url: YouTube動画のURL
+
+        Returns:
+            ダウンロードしたファイルのパス
+        """
+
+    def transcribe_audio(
+        self,
+        audio_file: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        音声ファイルを文字起こし
+
+        Args:
+            audio_file: 音声ファイルのパス
+
+        Returns:
+            文字起こし結果（textキーを含む辞書）
+        """
+
+    def process_video(self, url: str) -> Optional[Dict[str, str]]:
+        """
+        YouTube動画をダウンロードして文字起こし
+
+        Args:
+            url: YouTube動画のURL
+
+        Returns:
+            動画情報と文字起こしテキストを含む辞書
+            {url, title, author, duration, transcript, audio_file}
+        """
+
+    def get_video_info(self, url: str) -> Optional[Dict[str, Any]]:
+        """
+        YouTube動画の情報を取得
+
+        Args:
+            url: YouTube動画のURL
+
+        Returns:
+            動画情報の辞書
+            {id, title, uploader, duration, description, upload_date, view_count, like_count}
+        """
+```
+
+**使用例:**
+```python
+collector = YouTubeCollector(
+    output_dir="outputs/temp",
+    whisper_model="mlx-community/whisper-large-v3-turbo"
+)
+
+result = collector.process_video("https://youtube.com/watch?v=...")
+print(result['transcript'])
+```
+
+---
+
+## LLM抽象化レイヤー
+
+### BaseLLMClient
+
+LLMクライアントの抽象基底クラス。
+
+**ファイル:** `minitools/llm/base.py`
+
+```python
+class BaseLLMClient(ABC):
+    """LLMクライアントの抽象基底クラス"""
+
+    @abstractmethod
+    async def chat(
+        self,
+        messages: List[Dict[str, str]],
+        model: Optional[str] = None
+    ) -> str:
+        """
+        メッセージを送信してレスポンスを取得
+
+        Args:
+            messages: チャットメッセージのリスト
+                      各メッセージは {"role": "user"|"assistant"|"system", "content": "..."}
+            model: 使用するモデル名（省略時はデフォルトモデルを使用）
+
+        Returns:
+            LLMからのレスポンステキスト
+        """
+
+    @abstractmethod
+    async def generate(
+        self,
+        prompt: str,
+        model: Optional[str] = None
+    ) -> str:
+        """
+        プロンプトからテキスト生成
+
+        Args:
+            prompt: 生成のためのプロンプト
+            model: 使用するモデル名（省略時はデフォルトモデルを使用）
+
+        Returns:
+            生成されたテキスト
+        """
+```
+
+---
+
+### get_llm_client
+
+LLMクライアントを取得するファクトリ関数。
+
+**ファイル:** `minitools/llm/__init__.py`
+
+```python
+def get_llm_client(
+    provider: Optional[str] = None,
+    model: Optional[str] = None
+) -> BaseLLMClient:
+    """
+    LLMクライアントを取得するファクトリ関数
+
+    LangChainベースの実装を優先使用し、ImportError時は
+    ネイティブクライアントにフォールバックします。
+
+    Args:
+        provider: LLMプロバイダー名（"ollama" または "openai"）
+                  省略時は設定ファイルから取得
+        model: 使用するモデル名（省略時は各プロバイダーのデフォルトを使用）
+
+    Returns:
+        LLMクライアントインスタンス
+
+    Raises:
+        ValueError: 未対応のプロバイダーが指定された場合
+        LLMError: クライアントの初期化に失敗した場合
+    """
+```
+
+**使用例:**
+```python
+from minitools.llm import get_llm_client
+
+# デフォルト設定で取得
+client = get_llm_client()
+
+# プロバイダーとモデルを指定
+client = get_llm_client(provider="openai", model="gpt-4o")
+
+# 共通インターフェースで呼び出し
+response = await client.chat([
+    {"role": "user", "content": "Hello!"}
+])
+
+# シンプルなテキスト生成
+text = await client.generate("Summarize this text: ...")
+
+# JSON形式でレスポンスを取得（LangChainクライアントのみ）
+json_response = await client.chat_json([
+    {"role": "user", "content": "Return JSON: {\"key\": \"value\"}"}
+])
+```
+
+---
+
+### LangChainクライアントの追加メソッド
+
+LangChainベースのクライアント（`LangChainOllamaClient`, `LangChainOpenAIClient`）は、基底クラスの`chat()`、`generate()`に加えて以下のメソッドを提供します。
+
+**ファイル:** `minitools/llm/langchain_ollama.py`, `minitools/llm/langchain_openai.py`
+
+```python
+async def chat_json(
+    self,
+    messages: List[Dict[str, str]],
+    model: Optional[str] = None
+) -> str:
+    """
+    JSON形式のレスポンスを取得
+
+    Ollamaの場合はformat="json"を指定、OpenAIの場合は
+    response_format={"type": "json_object"}を指定して呼び出します。
+
+    Args:
+        messages: チャットメッセージのリスト
+        model: 使用するモデル名（省略時はデフォルトモデルを使用）
+
+    Returns:
+        LLMからのJSONレスポンステキスト
+
+    Raises:
+        LLMError: API呼び出しに失敗した場合
+    """
+```
+
+**使用例:**
+```python
+from minitools.llm import get_llm_client
+
+client = get_llm_client(provider="ollama")
+
+# JSON形式でレスポンスを取得
+json_str = await client.chat_json([
+    {"role": "user", "content": "以下の情報をJSONで返してください: name=Alice, age=30"}
+])
+# => '{"name": "Alice", "age": 30}'
+```
+
+---
+
+### BaseEmbeddingClient
+
+Embeddingクライアントの抽象基底クラス。
+
+**ファイル:** `minitools/llm/embeddings.py`
+
+```python
+class BaseEmbeddingClient(ABC):
+    """Embeddingクライアントの抽象基底クラス"""
+
+    @abstractmethod
+    async def embed_texts(
+        self,
+        texts: List[str]
+    ) -> List[List[float]]:
+        """
+        テキストリストをEmbeddingベクトルに変換
+
+        Args:
+            texts: 変換するテキストのリスト
+
+        Returns:
+            各テキストに対応するEmbeddingベクトルのリスト
+        """
+
+    @abstractmethod
+    async def embed_text(
+        self,
+        text: str
+    ) -> List[float]:
+        """
+        単一テキストをEmbeddingベクトルに変換
+
+        Args:
+            text: 変換するテキスト
+
+        Returns:
+            Embeddingベクトル
+        """
+```
+
+---
+
+### get_embedding_client
+
+Embeddingクライアントを取得するファクトリ関数。
+
+**ファイル:** `minitools/llm/embeddings.py`
+
+```python
+def get_embedding_client(
+    provider: Optional[str] = None
+) -> BaseEmbeddingClient:
+    """
+    Embeddingクライアントを取得するファクトリ関数
+
+    Args:
+        provider: プロバイダー名（"ollama" または "openai"）
+                  省略時は設定ファイルから取得
+
+    Returns:
+        Embeddingクライアントインスタンス
+
+    Raises:
+        ValueError: 未対応のプロバイダーが指定された場合
+    """
+```
+
+**使用例:**
+```python
+from minitools.llm import get_embedding_client
+
+# デフォルト設定で取得
+embedding = get_embedding_client()
+
+# プロバイダーを指定
+embedding = get_embedding_client(provider="openai")
+
+# 複数テキストのEmbedding
+vectors = await embedding.embed_texts([
+    "First document",
+    "Second document"
+])
+
+# 単一テキストのEmbedding
+vector = await embedding.embed_text("Query text")
+```
+
+---
+
+## Readers
+
+### NotionReader
+
+Notionデータベースから記事を読み取るクラス（読み取り専用）。
+
+**ファイル:** `minitools/readers/notion.py`
+
+```python
+class NotionReader:
+    """Notionデータベースから記事を読み取るクラス（読み取り専用）"""
+
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        コンストラクタ
+
+        Args:
+            api_key: Notion APIキー（省略時は環境変数から取得）
+
+        Raises:
+            ValueError: APIキーが設定されていない場合
+        """
+
+    async def get_articles_by_date_range(
+        self,
+        database_id: str,
+        start_date: str,
+        end_date: str,
+        date_property: str = "Date"
+    ) -> List[Dict[str, Any]]:
+        """
+        指定期間の記事を全件取得
+
+        Args:
+            database_id: NotionデータベースID
+            start_date: 開始日（YYYY-MM-DD形式）
+            end_date: 終了日（YYYY-MM-DD形式）
+            date_property: 日付プロパティ名（デフォルト: "Date"）
+
+        Returns:
+            記事データの辞書リスト
+
+        Raises:
+            NotionReadError: 読み取りに失敗した場合
+        """
+
+    async def get_database_info(
+        self,
+        database_id: str
+    ) -> Dict[str, Any]:
+        """
+        データベースの情報を取得
+
+        Args:
+            database_id: NotionデータベースID
+
+        Returns:
+            データベース情報の辞書
+        """
+```
+
+**使用例:**
+```python
+reader = NotionReader()
+
+# 日付範囲で記事を取得
+articles = await reader.get_articles_by_date_range(
+    database_id="xxx",
+    start_date="2024-01-01",
+    end_date="2024-01-07",
+    date_property="Date"
+)
+```
+
+---
+
+## Processors
+
+### Translator
+
+テキストを翻訳するクラス。
+
+**ファイル:** `minitools/processors/translator.py`
+
+```python
+class Translator:
+    """テキストを翻訳するクラス"""
+
+    def __init__(self, model: Optional[str] = None):
+        """
+        コンストラクタ
+
+        Args:
+            model: 使用するOllamaモデル名（デフォルト: config から取得）
+        """
+
+    async def translate_to_japanese(
+        self,
+        text: str,
+        context: str = ""
+    ) -> str:
+        """
+        テキストを日本語に翻訳
+
+        Args:
+            text: 翻訳するテキスト
+            context: 追加のコンテキスト情報
+
+        Returns:
+            翻訳されたテキスト
+        """
+
+    async def translate_with_summary(
+        self,
+        title: str,
+        content: str,
+        author: str = ""
+    ) -> Dict[str, str]:
+        """
+        タイトルと内容を翻訳し、要約も生成
+
+        Args:
+            title: 記事のタイトル
+            content: 記事の内容
+            author: 著者名（オプション）
+
+        Returns:
+            {"japanese_title": str, "japanese_summary": str}
+        """
+```
+
+**使用例:**
+```python
+translator = Translator()
+
+# シンプルな翻訳
+japanese_text = await translator.translate_to_japanese(
+    "Hello, world!",
+    context="greeting"
+)
+
+# タイトルと要約の同時生成
+result = await translator.translate_with_summary(
+    title="Introduction to LLM",
+    content="Large Language Models are...",
+    author="John Doe"
+)
+print(result['japanese_title'])
+print(result['japanese_summary'])
+```
+
+---
+
+### Summarizer
+
+コンテンツを要約するクラス。
+
+**ファイル:** `minitools/processors/summarizer.py`
+
+```python
+class Summarizer:
+    """コンテンツを要約するクラス"""
+
+    def __init__(self, model: Optional[str] = None):
+        """
+        コンストラクタ
+
+        Args:
+            model: 使用するOllamaモデル名（デフォルト: config から取得）
+        """
+
+    async def summarize(
+        self,
+        text: str,
+        max_length: int = 200,
+        language: str = "japanese"
+    ) -> str:
+        """
+        テキストを要約
+
+        Args:
+            text: 要約するテキスト
+            max_length: 要約の最大文字数
+            language: 要約の言語（japanese/english）
+
+        Returns:
+            要約されたテキスト
+        """
+
+    async def extract_key_points(
+        self,
+        text: str,
+        num_points: int = 5
+    ) -> list[str]:
+        """
+        テキストから重要ポイントを抽出
+
+        Args:
+            text: 分析するテキスト
+            num_points: 抽出するポイント数
+
+        Returns:
+            重要ポイントのリスト
+        """
+```
+
+**使用例:**
+```python
+summarizer = Summarizer()
+
+# 要約
+summary = await summarizer.summarize(
+    text="Long article content...",
+    max_length=500,
+    language="japanese"
+)
+
+# キーポイント抽出
+points = await summarizer.extract_key_points(
+    text="Long article content...",
+    num_points=5
+)
+```
+
+---
+
+### WeeklyDigestProcessor
+
+週次ダイジェストを生成するプロセッサ。
+
+**ファイル:** `minitools/processors/weekly_digest.py`
+
+```python
+class WeeklyDigestProcessor:
+    """週次ダイジェスト生成プロセッサ"""
+
+    def __init__(
+        self,
+        llm_client: BaseLLMClient,
+        embedding_client: Optional[BaseEmbeddingClient] = None,
+        max_concurrent: int = 3
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            llm_client: LLMクライアントインスタンス
+            embedding_client: Embeddingクライアント（省略時は自動生成）
+            max_concurrent: 最大並列処理数（デフォルト: 3）
+        """
+
+    async def rank_articles_by_importance(
+        self,
+        articles: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        各記事に重要度スコア(1-10)を付与
+
+        Args:
+            articles: 記事データのリスト
+
+        Returns:
+            importance_scoreが付与された記事リスト
+        """
+
+    async def select_top_articles(
+        self,
+        articles: List[Dict[str, Any]],
+        top_n: int = 20,
+        deduplicate: Optional[bool] = None,
+        buffer_ratio: Optional[float] = None,
+        similarity_threshold: Optional[float] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        スコア上位N件を取得（オプションで重複除去）
+
+        Args:
+            articles: importance_scoreが付与された記事リスト
+            top_n: 取得する記事数（デフォルト: 20）
+            deduplicate: 重複除去を行うか（省略時は設定ファイルに従う）
+            buffer_ratio: 候補記事の倍率（省略時は設定ファイルに従う）
+            similarity_threshold: 類似度閾値（省略時は設定ファイルに従う）
+
+        Returns:
+            上位N件の記事リスト
+        """
+
+    async def generate_trend_summary(
+        self,
+        articles: List[Dict[str, Any]]
+    ) -> str:
+        """
+        週のトレンド総括を生成
+
+        Args:
+            articles: 上位記事のリスト
+
+        Returns:
+            200-400文字の日本語トレンド総括
+        """
+
+    async def generate_article_summaries(
+        self,
+        articles: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        各記事の3-4行要約を生成
+
+        Args:
+            articles: 記事データのリスト
+
+        Returns:
+            digest_summaryが付与された記事リスト
+        """
+
+    async def process(
+        self,
+        articles: List[Dict[str, Any]],
+        top_n: int = 20,
+        deduplicate: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        週次ダイジェストを一括生成
+
+        Args:
+            articles: 全記事リスト
+            top_n: 上位記事数（デフォルト: 20）
+            deduplicate: 重複除去を行うか
+
+        Returns:
+            処理結果の辞書:
+            - trend_summary: トレンド総括
+            - top_articles: 上位記事リスト（要約付き）
+            - total_articles: 処理した記事総数
+            - duplicate_groups: 検出した重複グループ数（重複除去時のみ）
+        """
+```
+
+**使用例:**
+```python
+from minitools.llm import get_llm_client, get_embedding_client
+
+llm = get_llm_client(provider="ollama")
+embedding = get_embedding_client(provider="ollama")
+
+processor = WeeklyDigestProcessor(
+    llm_client=llm,
+    embedding_client=embedding
+)
+
+result = await processor.process(
+    articles=articles_list,
+    top_n=20,
+    deduplicate=True
+)
+
+print(result['trend_summary'])
+for article in result['top_articles']:
+    print(f"{article['title']} - スコア: {article['importance_score']}")
+```
+
+**CLIオプション:**
+```bash
+# 基本使用
+uv run weekly-digest                              # デフォルト設定で実行
+uv run weekly-digest --days 14                    # 過去14日分を取得
+uv run weekly-digest --top 10                     # 上位10件を選出
+
+# LLMプロバイダー指定
+uv run weekly-digest --provider openai            # OpenAI APIを使用
+uv run weekly-digest --embedding openai           # Embeddingのみ OpenAI を使用
+
+# オプション
+uv run weekly-digest --dry-run                    # Slack送信をスキップ
+uv run weekly-digest --output out.md              # ファイルに保存
+uv run weekly-digest --no-dedup                   # 類似記事除去をスキップ
+```
+
+---
+
+### DuplicateDetector
+
+類似記事を検出してグループ化するクラス。
+
+**ファイル:** `minitools/processors/duplicate_detector.py`
+
+**補助クラス/関数:**
+
+```python
+class UnionFind:
+    """Union-Findデータ構造（クラスタリング用）"""
+
+    def __init__(self, n: int):
+        """
+        Args:
+            n: 要素数
+        """
+
+    def find(self, x: int) -> int:
+        """要素の根を取得（経路圧縮付き）"""
+
+    def union(self, x: int, y: int) -> None:
+        """2つの要素を同じグループに統合"""
+
+    def get_groups(self) -> Dict[int, List[int]]:
+        """各グループのメンバーを返す"""
+
+
+def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    """
+    2つのベクトル間のコサイン類似度を計算
+
+    Args:
+        vec1: ベクトル1
+        vec2: ベクトル2
+
+    Returns:
+        コサイン類似度（-1.0〜1.0）
+    """
+```
+
+**メインクラス:**
+
+```python
+class DuplicateDetector:
+    """類似記事検出クラス"""
+
+    def __init__(
+        self,
+        embedding_client: BaseEmbeddingClient,
+        similarity_threshold: float = 0.85
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            embedding_client: Embeddingクライアント
+            similarity_threshold: 類似度閾値（デフォルト: 0.85）
+        """
+
+    async def detect_duplicates(
+        self,
+        articles: List[Dict[str, Any]]
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        類似記事をグループ化して返す
+
+        Args:
+            articles: 記事データのリスト
+
+        Returns:
+            類似記事グループのリスト（各グループは記事リスト）
+        """
+
+    def select_representatives(
+        self,
+        groups: List[List[Dict[str, Any]]],
+        top_n: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        各グループから代表記事を選出し、上位N件を返す
+
+        Args:
+            groups: 類似記事グループのリスト
+            top_n: 取得する記事数（デフォルト: 20）
+
+        Returns:
+            代表記事のリスト（スコア降順）
+        """
+
+
+async def deduplicate_articles(
+    articles: List[Dict[str, Any]],
+    embedding_client: BaseEmbeddingClient,
+    similarity_threshold: float = 0.85,
+    buffer_ratio: float = 2.5,
+    top_n: int = 20
+) -> List[Dict[str, Any]]:
+    """
+    記事リストから重複を除去して上位N件を返す
+
+    Args:
+        articles: 記事データのリスト（importance_score付き）
+        embedding_client: Embeddingクライアント
+        similarity_threshold: 類似度閾値（デフォルト: 0.85）
+        buffer_ratio: 候補記事の倍率（デフォルト: 2.5）
+        top_n: 最終的に取得する記事数（デフォルト: 20）
+
+    Returns:
+        重複除去済みの上位N件記事リスト
+    """
+```
+
+**使用例:**
+```python
+from minitools.llm import get_embedding_client
+from minitools.processors import DuplicateDetector, deduplicate_articles
+
+embedding = get_embedding_client(provider="ollama")
+
+# クラスを直接使用
+detector = DuplicateDetector(
+    embedding_client=embedding,
+    similarity_threshold=0.85
+)
+groups = await detector.detect_duplicates(articles)
+representatives = detector.select_representatives(groups, top_n=20)
+
+# 便利関数を使用
+deduped = await deduplicate_articles(
+    articles=articles,
+    embedding_client=embedding,
+    similarity_threshold=0.85,
+    top_n=20
+)
+```
+
+---
+
+## Publishers
+
+### NotionPublisher
+
+Notionデータベースにコンテンツを保存するクラス。
+
+**ファイル:** `minitools/publishers/notion.py`
+
+```python
+class NotionPublisher:
+    """Notionデータベースにコンテンツを保存するクラス"""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        source_type: Optional[str] = None
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            api_key: Notion APIキー（デフォルト: 環境変数から取得）
+            source_type: ソースタイプ（'arxiv', 'medium', 'google_alerts'）
+        """
+
+    async def check_existing(
+        self,
+        database_id: str,
+        url: str
+    ) -> bool:
+        """
+        URLが既にデータベースに存在するかチェック
+
+        Args:
+            database_id: NotionデータベースID
+            url: チェックするURL
+
+        Returns:
+            存在する場合True
+        """
+
+    async def create_page(
+        self,
+        database_id: str,
+        properties: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Notionページを作成
+
+        Args:
+            database_id: NotionデータベースID
+            properties: ページプロパティ
+
+        Returns:
+            作成されたページのID
+        """
+
+    async def save_article(
+        self,
+        database_id: str,
+        article_data: Dict[str, Any]
+    ) -> bool:
+        """
+        記事をNotionデータベースに保存
+
+        Args:
+            database_id: NotionデータベースID
+            article_data: 記事データ
+
+        Returns:
+            保存成功の場合True
+        """
+
+    async def batch_save_articles(
+        self,
+        database_id: str,
+        articles: List[Dict[str, Any]],
+        max_concurrent: int = 3
+    ) -> Dict[str, Any]:
+        """
+        複数の記事を並列でNotionに保存
+
+        Args:
+            database_id: NotionデータベースID
+            articles: 記事データのリスト
+            max_concurrent: 最大同時実行数
+
+        Returns:
+            {"stats": {success, skipped, failed}, "results": {...}}
+        """
+```
+
+**使用例:**
+```python
+publisher = NotionPublisher(source_type='medium')
+
+# 単一記事の保存
+success = await publisher.save_article(
+    database_id="xxx",
+    article_data={
+        'title': 'Article Title',
+        'url': 'https://example.com',
+        'author': 'Author Name',
+        'japanese_title': '記事タイトル',
+        'japanese_summary': '記事の要約...'
+    }
+)
+
+# バッチ保存
+result = await publisher.batch_save_articles(
+    database_id="xxx",
+    articles=articles_list,
+    max_concurrent=3
+)
+print(f"成功: {result['stats']['success']}")
+```
+
+---
+
+### SlackPublisher
+
+Slackにメッセージを送信するクラス。
+
+**ファイル:** `minitools/publishers/slack.py`
+
+```python
+class SlackPublisher:
+    """Slackにメッセージを送信するクラス"""
+
+    def __init__(self, webhook_url: Optional[str] = None):
+        """
+        コンストラクタ
+
+        Args:
+            webhook_url: Slack Webhook URL
+        """
+
+    async def __aenter__(self) -> 'SlackPublisher':
+        """非同期コンテキストマネージャーのエントリー"""
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """非同期コンテキストマネージャーのクリーンアップ"""
+
+    def set_webhook_url(self, webhook_url: str):
+        """Webhook URLを設定"""
+
+    async def send_message(
+        self,
+        message: str,
+        webhook_url: Optional[str] = None
+    ) -> bool:
+        """
+        Slackにメッセージを送信
+
+        Args:
+            message: 送信するメッセージ
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            送信成功の場合True
+        """
+
+    def format_articles_message(
+        self,
+        articles: List[Dict[str, Any]],
+        date: Optional[str] = None,
+        title: str = "Daily Digest"
+    ) -> str:
+        """
+        記事リストをSlackメッセージ形式にフォーマット
+
+        Args:
+            articles: 記事データのリスト
+            date: 日付文字列
+            title: メッセージタイトル
+
+        Returns:
+            フォーマットされたメッセージ
+        """
+
+    def format_simple_list(
+        self,
+        items: List[str],
+        title: str = "通知"
+    ) -> str:
+        """
+        シンプルなリストをSlackメッセージ形式にフォーマット
+
+        Args:
+            items: アイテムのリスト
+            title: メッセージタイトル
+
+        Returns:
+            フォーマットされたメッセージ
+        """
+
+    async def send_articles(
+        self,
+        articles: List[Dict[str, Any]],
+        webhook_url: Optional[str] = None,
+        date: Optional[str] = None,
+        title: str = "Daily Digest"
+    ) -> bool:
+        """
+        記事リストをフォーマットしてSlackに送信
+
+        Args:
+            articles: 記事データのリスト
+            webhook_url: 使用するWebhook URL
+            date: 日付文字列
+            title: メッセージタイトル
+
+        Returns:
+            送信成功の場合True
+        """
+
+    def format_weekly_digest(
+        self,
+        start_date: str,
+        end_date: str,
+        trend_summary: str,
+        articles: List[Dict[str, Any]]
+    ) -> str:
+        """
+        週次ダイジェストをSlackメッセージ形式にフォーマット
+
+        Args:
+            start_date: 期間開始日（YYYY-MM-DD形式）
+            end_date: 期間終了日（YYYY-MM-DD形式）
+            trend_summary: 週のトレンド総括
+            articles: 上位記事リスト（digest_summary付き）
+
+        Returns:
+            フォーマットされたメッセージ
+        """
+
+    async def send_weekly_digest(
+        self,
+        start_date: str,
+        end_date: str,
+        trend_summary: str,
+        articles: List[Dict[str, Any]],
+        webhook_url: Optional[str] = None
+    ) -> bool:
+        """
+        週次ダイジェストをフォーマットしてSlackに送信
+
+        Args:
+            start_date: 期間開始日
+            end_date: 期間終了日
+            trend_summary: トレンド総括
+            articles: 上位記事リスト
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            送信成功の場合True
+        """
+```
+
+**使用例:**
+```python
+async with SlackPublisher(webhook_url) as slack:
+    # シンプルなメッセージ送信
+    await slack.send_message("Hello, Slack!")
+
+    # 記事リストの送信
+    await slack.send_articles(
+        articles=articles_list,
+        date="2024-01-15",
+        title="Medium Daily Digest"
+    )
+
+    # 週次ダイジェストの送信
+    await slack.send_weekly_digest(
+        start_date="2024-01-08",
+        end_date="2024-01-15",
+        trend_summary="今週のAI分野では...",
+        articles=top_articles
+    )
+```
+
+---
+
+## Utils
+
+### Config
+
+設定管理クラス（シングルトン）。
+
+**ファイル:** `minitools/utils/config.py`
+
+```python
+class Config:
+    """設定管理クラス（シングルトン）"""
+
+    def __init__(self):
+        """コンストラクタ（シングルトン）"""
+
+    def load_config(self):
+        """settings.yamlを読み込み"""
+
+    def get(
+        self,
+        key_path: str,
+        default: Any = None
+    ) -> Any:
+        """
+        ドット記法でネストされた値を取得
+
+        Args:
+            key_path: ドット区切りのキーパス
+            default: キーが存在しない場合のデフォルト値
+
+        Returns:
+            設定値またはデフォルト値
+
+        Examples:
+            >>> config.get('models.translation')
+            'gemma3:27b'
+            >>> config.get('processing.retry_count', 5)
+            3
+        """
+
+    @staticmethod
+    def get_api_key(service: str) -> Optional[str]:
+        """
+        APIキーを環境変数から取得
+
+        Args:
+            service: サービス名
+
+        Returns:
+            APIキーまたはWebhook URL
+
+        Examples:
+            >>> Config.get_api_key('notion')
+            'secret_xxx...'
+            >>> Config.get_api_key('slack_arxiv')
+            'https://hooks.slack.com/...'
+        """
+
+    def reload(self):
+        """設定を再読み込み"""
+
+    def to_dict(self) -> dict:
+        """現在の設定を辞書として返す"""
+
+
+def get_config() -> Config:
+    """Config インスタンスを取得"""
+```
+
+**使用例:**
+```python
+from minitools.utils.config import get_config, Config
+
+config = get_config()
+
+# 設定値の取得
+model = config.get('models.translation', 'default-model')
+batch_size = config.get('output.notion.batch_size', 10)
+
+# APIキーの取得
+notion_key = Config.get_api_key('notion')
+slack_url = Config.get_api_key('slack_arxiv')
+```
+
+---
+
+### Logger
+
+カラー対応ロギングモジュール。
+
+**ファイル:** `minitools/utils/logger.py`
+
+```python
+class ColoredFormatter(logging.Formatter):
+    """ログレベルに応じて色付きでターミナルに出力するフォーマッター"""
+
+    COLORS = {
+        'DEBUG': '\033[36m',     # シアン
+        'INFO': '\033[32m',      # 緑
+        'WARNING': '\033[33m',   # 黄色
+        'ERROR': '\033[31m',     # 赤
+        'CRITICAL': '\033[35m',  # マゼンタ
+    }
+
+    def __init__(
+        self,
+        fmt: Optional[str] = None,
+        datefmt: Optional[str] = None,
+        use_colors: bool = True
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            fmt: ログフォーマット
+            datefmt: 日付フォーマット
+            use_colors: カラー出力の有効/無効
+        """
+
+
+def setup_logger(
+    name: str = __name__,
+    log_file: Optional[str] = None,
+    level: int = logging.INFO,
+    console_level: Optional[int] = None,
+    file_level: Optional[int] = None,
+    use_colors: bool = True
+) -> logging.Logger:
+    """
+    統一されたロガーを設定する
+
+    Args:
+        name: ロガー名（通常は__name__）
+        log_file: ログファイル名
+        level: デフォルトのログレベル
+        console_level: コンソール出力のログレベル
+        file_level: ファイル出力のログレベル
+        use_colors: ターミナル出力でカラーを使用するか
+
+    Returns:
+        設定されたロガーインスタンス
+    """
+
+
+def get_logger(
+    name: str = __name__,
+    log_file: Optional[str] = None
+) -> logging.Logger:
+    """
+    簡易的なロガー取得関数
+
+    Args:
+        name: ロガー名
+        log_file: ログファイル名
+
+    Returns:
+        設定されたロガーインスタンス
+    """
+```
+
+**使用例:**
+```python
+from minitools.utils.logger import get_logger, setup_logger
+
+# 簡易ロガー
+logger = get_logger(__name__)
+
+# 詳細設定付きロガー
+logger = setup_logger(
+    name="scripts.arxiv",
+    log_file="arxiv.log",
+    level=logging.DEBUG,
+    use_colors=True
+)
+
+logger.debug("デバッグ情報")
+logger.info("処理開始")
+logger.warning("警告メッセージ")
+logger.error("エラー発生")
+```
+
+---
+
+## Dataclass定義
+
+### Article
+
+Medium記事情報を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/medium.py`
+
+```python
+@dataclass
+class Article:
+    """記事情報を格納するデータクラス"""
+    title: str               # 記事タイトル
+    url: str                 # 記事URL
+    author: str              # 著者名
+    preview: str = ""        # メールから抽出したプレビューテキスト
+    japanese_title: str = "" # 日本語タイトル
+    summary: str = ""        # 英語要約
+    japanese_summary: str = ""  # 日本語要約
+    date_processed: str = "" # 処理日時
+```
+
+### Alert
+
+Google Alertsアラート情報を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/google_alerts.py`
+
+```python
+@dataclass
+class Alert:
+    """アラート情報を格納するデータクラス"""
+    title: str               # アラートタイトル
+    url: str                 # 記事URL
+    source: str              # ソース（ドメイン名）
+    snippet: str = ""        # スニペット
+    japanese_title: str = "" # 日本語タイトル
+    japanese_summary: str = ""  # 日本語要約
+    date_processed: str = "" # 処理日時
+    article_content: str = ""   # 記事本文
+    email_date: str = ""     # メール配信日
+    tags: List[str] = None   # タグリスト
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = []
+```

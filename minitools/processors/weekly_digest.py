@@ -1,0 +1,391 @@
+"""
+Weekly digest processor for generating AI-powered summaries.
+"""
+
+import asyncio
+import json
+from typing import Any, Dict, List, Optional
+
+from minitools.llm.base import BaseLLMClient, LLMError
+from minitools.llm.embeddings import BaseEmbeddingClient, get_embedding_client
+from minitools.processors.duplicate_detector import deduplicate_articles
+from minitools.utils.config import get_config
+from minitools.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+# 重要度判定プロンプト
+IMPORTANCE_PROMPT_TEMPLATE = """あなたはAI/テクノロジーニュースの専門アナリストです。
+以下の記事の重要度を評価してください。
+
+## 評価基準（各項目1-10点）
+1. **技術的影響度**: 技術的なブレークスルーや革新性の程度
+2. **業界インパクト**: 業界全体への影響範囲と深刻度
+3. **話題性**: 現在の注目度、メディアでの言及頻度
+4. **新規性**: 新しい発見・発表か、既存情報の焼き直しか
+
+## 記事情報
+タイトル: {title}
+要約: {summary}
+
+## 回答形式
+以下のJSON形式で回答してください:
+{{
+  "technical_impact": <1-10の整数>,
+  "industry_impact": <1-10の整数>,
+  "trending": <1-10の整数>,
+  "novelty": <1-10の整数>,
+  "reason": "<50文字以内の簡潔な評価理由>"
+}}
+"""
+
+# トレンド総括プロンプト
+TREND_SUMMARY_PROMPT_TEMPLATE = """あなたはAI/テクノロジー分野の専門ジャーナリストです。
+以下の記事リストを分析し、今週のAI分野のトレンドを総括してください。
+
+## 記事リスト
+{articles_text}
+
+## 指示
+- 300-400文字の日本語で総括を作成してください
+- 主要なトレンドや注目すべき動向を3-4点挙げてください
+- 具体的な記事タイトルに言及する必要はありません
+- ビジネスパーソンが読んで価値のある洞察を含めてください
+
+## 総括:
+"""
+
+# 記事要約プロンプト
+ARTICLE_SUMMARY_PROMPT_TEMPLATE = """以下の記事を3-4文（100-150文字）の日本語で要約してください。
+
+タイトル: {title}
+内容: {content}
+
+要約:
+"""
+
+
+class WeeklyDigestProcessor:
+    """週次ダイジェスト生成プロセッサ"""
+
+    def __init__(
+        self,
+        llm_client: BaseLLMClient,
+        embedding_client: Optional[BaseEmbeddingClient] = None,
+        max_concurrent: int = 3,
+    ):
+        """
+        Args:
+            llm_client: LLMクライアントインスタンス
+            embedding_client: Embeddingクライアント（省略時は自動生成）
+            max_concurrent: 最大並列処理数（デフォルト: 3）
+        """
+        self.llm = llm_client
+        self.embedding_client = embedding_client
+        config = get_config()
+        self.max_concurrent = max_concurrent or config.get(
+            "processing.max_concurrent_ollama", 3
+        )
+        # 重複除去設定
+        self.dedup_enabled = config.get("weekly_digest.deduplication.enabled", True)
+        self.similarity_threshold = config.get(
+            "weekly_digest.deduplication.similarity_threshold", 0.85
+        )
+        self.buffer_ratio = config.get(
+            "weekly_digest.deduplication.buffer_ratio", 2.5
+        )
+        logger.info(
+            f"WeeklyDigestProcessor initialized "
+            f"(max_concurrent={self.max_concurrent}, "
+            f"dedup_enabled={self.dedup_enabled})"
+        )
+
+    async def rank_articles_by_importance(
+        self,
+        articles: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        各記事に重要度スコア(1-10)を付与
+
+        Args:
+            articles: 記事データのリスト
+
+        Returns:
+            importance_scoreが付与された記事リスト
+        """
+        if not articles:
+            return []
+
+        logger.info(f"Ranking {len(articles)} articles by importance...")
+        semaphore = asyncio.Semaphore(self.max_concurrent)
+
+        async def score_article(article: Dict[str, Any]) -> Dict[str, Any]:
+            async with semaphore:
+                title = article.get("title", article.get("original_title", ""))
+                summary = article.get("summary", article.get("snippet", ""))
+
+                if not title:
+                    logger.warning("Article without title, assigning score 0")
+                    article["importance_score"] = 0
+                    article["score_reason"] = "タイトルなし"
+                    return article
+
+                prompt = IMPORTANCE_PROMPT_TEMPLATE.format(
+                    title=title,
+                    summary=summary[:500] if summary else "要約なし",
+                )
+
+                try:
+                    # chat_jsonメソッドがあれば使用、なければ通常のgenerateを使用
+                    if hasattr(self.llm, "chat_json"):
+                        response = await self.llm.chat_json(
+                            [{"role": "user", "content": prompt}]
+                        )
+                    else:
+                        response = await self.llm.generate(prompt)
+
+                    # JSONをパース
+                    result = json.loads(response)
+
+                    # スコアを計算（4観点の平均）
+                    scores = [
+                        result.get("technical_impact", 5),
+                        result.get("industry_impact", 5),
+                        result.get("trending", 5),
+                        result.get("novelty", 5),
+                    ]
+                    avg_score = sum(scores) / len(scores)
+
+                    article["importance_score"] = round(avg_score, 1)
+                    article["score_reason"] = result.get("reason", "")
+                    article["score_details"] = result
+
+                    logger.debug(
+                        f"Scored '{title[:40]}...': {article['importance_score']}"
+                    )
+
+                except (json.JSONDecodeError, LLMError) as e:
+                    logger.warning(f"Failed to score article '{title[:40]}...': {e}")
+                    article["importance_score"] = 5  # デフォルトスコア
+                    article["score_reason"] = "スコアリング失敗"
+
+                return article
+
+        # 全記事を並列処理
+        tasks = [score_article(article) for article in articles]
+        scored_articles = await asyncio.gather(*tasks)
+
+        logger.info(f"Completed scoring {len(scored_articles)} articles")
+        return list(scored_articles)
+
+    async def select_top_articles(
+        self,
+        articles: List[Dict[str, Any]],
+        top_n: int = 20,
+        deduplicate: Optional[bool] = None,
+        buffer_ratio: Optional[float] = None,
+        similarity_threshold: Optional[float] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        スコア上位N件を取得（オプションで重複除去）
+
+        Args:
+            articles: importance_scoreが付与された記事リスト
+            top_n: 取得する記事数（デフォルト: 20）
+            deduplicate: 重複除去を行うか（省略時は設定ファイルに従う）
+            buffer_ratio: 候補記事の倍率（省略時は設定ファイルに従う）
+            similarity_threshold: 類似度閾値（省略時は設定ファイルに従う）
+
+        Returns:
+            上位N件の記事リスト
+        """
+        if not articles:
+            return []
+
+        # 重複除去の有効/無効を決定
+        do_dedupe = deduplicate if deduplicate is not None else self.dedup_enabled
+
+        if do_dedupe:
+            # Embeddingクライアントを取得（遅延初期化）
+            if self.embedding_client is None:
+                self.embedding_client = get_embedding_client()
+
+            # 重複除去を実行
+            threshold = (
+                similarity_threshold
+                if similarity_threshold is not None
+                else self.similarity_threshold
+            )
+            ratio = buffer_ratio if buffer_ratio is not None else self.buffer_ratio
+
+            top_articles = await deduplicate_articles(
+                articles=articles,
+                embedding_client=self.embedding_client,
+                similarity_threshold=threshold,
+                buffer_ratio=ratio,
+                top_n=top_n,
+            )
+        else:
+            # 重複除去なし: 単純にスコア順でソート
+            sorted_articles = sorted(
+                articles,
+                key=lambda x: x.get("importance_score", 0),
+                reverse=True,
+            )
+            top_articles = sorted_articles[:top_n]
+
+        if top_articles:
+            logger.info(
+                f"Selected top {len(top_articles)} articles "
+                f"(score range: {top_articles[0].get('importance_score', 0):.1f} - "
+                f"{top_articles[-1].get('importance_score', 0):.1f})"
+                + (f", dedup={do_dedupe}" if do_dedupe else "")
+            )
+        else:
+            logger.info("No articles selected")
+
+        return top_articles
+
+    async def generate_trend_summary(
+        self,
+        articles: List[Dict[str, Any]],
+    ) -> str:
+        """
+        週のトレンド総括を生成
+
+        Args:
+            articles: 上位記事のリスト
+
+        Returns:
+            200-400文字の日本語トレンド総括
+        """
+        if not articles:
+            return "今週は特筆すべきニュースがありませんでした。"
+
+        # 記事リストをテキスト化
+        articles_text = "\n".join(
+            f"- {a.get('title', a.get('original_title', 'タイトルなし'))}"
+            for a in articles[:20]  # 上位20件に制限
+        )
+
+        prompt = TREND_SUMMARY_PROMPT_TEMPLATE.format(articles_text=articles_text)
+
+        try:
+            summary = await self.llm.generate(prompt)
+            logger.info(f"Generated trend summary ({len(summary)} chars)")
+            return summary.strip()
+
+        except LLMError as e:
+            logger.error(f"Failed to generate trend summary: {e}")
+            return "トレンド総括の生成に失敗しました。"
+
+    async def generate_article_summaries(
+        self,
+        articles: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        各記事の3-4行要約を生成
+
+        Args:
+            articles: 記事データのリスト
+
+        Returns:
+            digest_summaryが付与された記事リスト
+        """
+        if not articles:
+            return []
+
+        logger.info(f"Generating summaries for {len(articles)} articles...")
+        semaphore = asyncio.Semaphore(self.max_concurrent)
+
+        async def summarize_article(article: Dict[str, Any]) -> Dict[str, Any]:
+            async with semaphore:
+                title = article.get("title", article.get("original_title", ""))
+                content = article.get("summary", article.get("snippet", ""))
+
+                # 既に日本語要約があれば使用
+                if article.get("japanese_summary"):
+                    article["digest_summary"] = article["japanese_summary"]
+                    return article
+
+                if not title and not content:
+                    article["digest_summary"] = "情報なし"
+                    return article
+
+                prompt = ARTICLE_SUMMARY_PROMPT_TEMPLATE.format(
+                    title=title or "タイトルなし",
+                    content=content[:1000] if content else "内容なし",
+                )
+
+                try:
+                    summary = await self.llm.generate(prompt)
+                    article["digest_summary"] = summary.strip()
+                    logger.debug(f"Summarized '{title[:40]}...'")
+
+                except LLMError as e:
+                    logger.warning(f"Failed to summarize '{title[:40]}...': {e}")
+                    # フォールバック: 既存の要約を使用
+                    article["digest_summary"] = content[:200] if content else "要約なし"
+
+                return article
+
+        # 全記事を並列処理
+        tasks = [summarize_article(article) for article in articles]
+        summarized_articles = await asyncio.gather(*tasks)
+
+        logger.info(f"Completed summarizing {len(summarized_articles)} articles")
+        return list(summarized_articles)
+
+    async def process(
+        self,
+        articles: List[Dict[str, Any]],
+        top_n: int = 20,
+        deduplicate: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """
+        週次ダイジェストを一括生成
+
+        Args:
+            articles: 全記事リスト
+            top_n: 上位記事数（デフォルト: 20）
+            deduplicate: 重複除去を行うか（省略時は設定ファイルに従う）
+
+        Returns:
+            処理結果の辞書:
+            - trend_summary: トレンド総括
+            - top_articles: 上位記事リスト（要約付き）
+            - total_articles: 処理した記事総数
+            - duplicate_groups: 検出した重複グループ数（重複除去時のみ）
+        """
+        logger.info(f"Starting weekly digest processing ({len(articles)} articles)...")
+
+        # 1. 重要度スコアリング
+        scored_articles = await self.rank_articles_by_importance(articles)
+
+        # 2. 上位N件を選出（重複除去付き）
+        top_articles = await self.select_top_articles(
+            scored_articles, top_n, deduplicate=deduplicate
+        )
+
+        # 3. トレンド総括を生成
+        trend_summary = await self.generate_trend_summary(top_articles)
+
+        # 4. 各記事の要約を生成
+        summarized_articles = await self.generate_article_summaries(top_articles)
+
+        logger.info("Weekly digest processing completed")
+
+        result = {
+            "trend_summary": trend_summary,
+            "top_articles": summarized_articles,
+            "total_articles": len(articles),
+        }
+
+        # 重複除去が有効な場合、重複グループ数を追加
+        duplicate_groups = sum(
+            1 for a in summarized_articles if a.get("duplicate_count", 1) > 1
+        )
+        if duplicate_groups > 0:
+            result["duplicate_groups"] = duplicate_groups
+
+        return result
