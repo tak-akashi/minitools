@@ -134,21 +134,122 @@ class SlackPublisher:
         
         return message
     
-    async def send_articles(self, articles: List[Dict[str, Any]], 
+    async def send_articles(self, articles: List[Dict[str, Any]],
                            webhook_url: Optional[str] = None,
                            date: Optional[str] = None,
                            title: str = "Daily Digest") -> bool:
         """
         記事リストをフォーマットしてSlackに送信
-        
+
         Args:
             articles: 記事データのリスト
             webhook_url: 使用するWebhook URL（オプション）
             date: 日付文字列
             title: メッセージタイトル
-            
+
         Returns:
             送信成功の場合True
         """
         message = self.format_articles_message(articles, date, title)
+        return await self.send_message(message, webhook_url)
+
+    def format_weekly_digest(
+        self,
+        start_date: str,
+        end_date: str,
+        trend_summary: str,
+        articles: List[Dict[str, Any]],
+    ) -> str:
+        """
+        週次ダイジェストをSlackメッセージ形式にフォーマット
+
+        Args:
+            start_date: 期間開始日（YYYY-MM-DD形式）
+            end_date: 期間終了日（YYYY-MM-DD形式）
+            trend_summary: 週のトレンド総括
+            articles: 上位記事リスト（digest_summary付き）
+
+        Returns:
+            フォーマットされたメッセージ
+        """
+        # ランキング用絵文字
+        rank_emoji = {1: "1", 2: "2", 3: "3"}
+
+        # ヘッダー
+        message = f"*Weekly AI Digest ({start_date} - {end_date})*\n"
+        message += f"📊 {len(articles)}件の記事を分析しました\n\n"
+
+        # トレンド総括セクション
+        message += "*📈 今週のトレンド*\n"
+        message += "─" * 30 + "\n"
+        message += f"{trend_summary}\n\n"
+
+        # 上位記事リスト
+        message += "*🏆 注目記事 TOP " + str(len(articles)) + "*\n"
+        message += "─" * 30 + "\n\n"
+
+        for i, article in enumerate(articles, 1):
+            # ランキング表示
+            if i <= 3:
+                rank_display = rank_emoji.get(i, str(i))
+            else:
+                rank_display = str(i)
+
+            # タイトル（日本語優先）
+            title = article.get("title", article.get("original_title", "タイトルなし"))
+
+            # スコア
+            score = article.get("importance_score", 0)
+
+            message += f"*{rank_display}. {title}*\n"
+
+            # ソース情報
+            source = article.get("source", "")
+            if source:
+                message += f"   📰 {source}\n"
+
+            # 重要度スコア
+            message += f"   ⭐ スコア: {score:.1f}/10\n"
+
+            # 要約
+            summary = article.get("digest_summary", article.get("summary", ""))
+            if summary:
+                # 長すぎる場合は切り詰め
+                if len(summary) > 200:
+                    summary = summary[:197] + "..."
+                message += f"   📄 {summary}\n"
+
+            # URL
+            url = article.get("url", "")
+            if url:
+                message += f"   🔗 <{url}|記事を読む>\n"
+
+            message += "\n"
+
+        return message
+
+    async def send_weekly_digest(
+        self,
+        start_date: str,
+        end_date: str,
+        trend_summary: str,
+        articles: List[Dict[str, Any]],
+        webhook_url: Optional[str] = None,
+    ) -> bool:
+        """
+        週次ダイジェストをフォーマットしてSlackに送信
+
+        Args:
+            start_date: 期間開始日
+            end_date: 期間終了日
+            trend_summary: トレンド総括
+            articles: 上位記事リスト
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            送信成功の場合True
+        """
+        message = self.format_weekly_digest(
+            start_date, end_date, trend_summary, articles
+        )
         return await self.send_message(message, webhook_url)

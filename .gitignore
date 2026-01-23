@@ -645,7 +645,8 @@ cython_debug/
 #.idea/
 
 CLAUDE.md
-
+.claude/
+.steering/
 # Ignore Google API credentials and tokens
 script/credentials.json
 credentials.json
