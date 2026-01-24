@@ -515,6 +515,179 @@ def _normalize_url_by_source(self, url: str) -> str:
     return url
 ```
 
+## テストパターン
+
+### テストファイルの配置
+
+```
+minitools/
+├── collectors/
+│   └── xxx_collector.py      # → tests/test_xxx_collector.py
+├── processors/
+│   └── xxx_processor.py      # → tests/test_xxx_processor.py
+├── publishers/
+│   └── xxx_publisher.py      # → tests/test_xxx_publisher.py
+└── llm/
+    └── xxx_client.py         # → tests/test_xxx_client.py
+
+tests/
+├── __init__.py
+├── conftest.py               # 共通フィクスチャ・モック
+├── test_xxx_collector.py
+├── test_xxx_processor.py
+└── ...
+```
+
+### テストクラスの構造
+
+```python
+"""Tests for XxxProcessor."""
+
+import pytest
+
+from minitools.processors.xxx_processor import XxxProcessor
+
+
+class TestXxxProcessor:
+    """XxxProcessorのテスト"""
+
+    @pytest.mark.asyncio
+    async def test_process_basic(self, mock_llm_client):
+        """基本的な処理のテスト"""
+        processor = XxxProcessor(llm_client=mock_llm_client)
+        result = await processor.process("input")
+
+        assert result is not None
+        assert "expected" in result
+
+    @pytest.mark.asyncio
+    async def test_process_empty_input(self, mock_llm_client):
+        """空入力の場合のテスト"""
+        processor = XxxProcessor(llm_client=mock_llm_client)
+        result = await processor.process("")
+
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_process_error_handling(self, mock_llm_client):
+        """エラー時の処理テスト"""
+        mock_llm_client.chat_response = None  # エラー状態をシミュレート
+        processor = XxxProcessor(llm_client=mock_llm_client)
+
+        with pytest.raises(ValueError):
+            await processor.process("input")
+```
+
+### 共通フィクスチャ（conftest.py）
+
+プロジェクトには以下のモッククライアントが用意されている:
+
+```python
+from tests.conftest import MockLLMClient, MockEmbeddingClient
+
+# MockLLMClient: LLMクライアントのモック
+# - chat_response: chatメソッドの戻り値を設定
+# - json_response: chat_jsonメソッドの戻り値を設定
+# - chat_calls: 呼び出し履歴を記録
+
+# MockEmbeddingClient: Embeddingクライアントのモック
+# - テキストごとに異なるembeddingを生成（ハッシュベース）
+# - embed_texts_calls, embed_text_calls: 呼び出し履歴を記録
+```
+
+フィクスチャの使用例:
+
+```python
+@pytest.fixture
+def mock_llm_client():
+    """デフォルトのモックLLMクライアント"""
+    return MockLLMClient()
+
+@pytest.fixture
+def mock_llm_client_custom():
+    """カスタムレスポンスのモックLLMクライアント"""
+    return MockLLMClient(
+        chat_response="カスタムレスポンス",
+        json_response='{"score": 8.5}'
+    )
+
+@pytest.fixture
+def sample_articles():
+    """テスト用のサンプル記事データ"""
+    return [
+        {"title": "Article 1", "summary": "Summary 1", "url": "https://example.com/1"},
+        {"title": "Article 2", "summary": "Summary 2", "url": "https://example.com/2"},
+    ]
+```
+
+### 非同期テストのパターン
+
+```python
+import pytest
+import asyncio
+
+
+class TestAsyncProcessor:
+    """非同期処理のテスト"""
+
+    @pytest.mark.asyncio
+    async def test_async_method(self, mock_llm_client):
+        """非同期メソッドのテスト"""
+        processor = AsyncProcessor(llm_client=mock_llm_client)
+        result = await processor.async_method()
+        assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_concurrent_processing(self, mock_llm_client):
+        """並行処理のテスト"""
+        processor = AsyncProcessor(llm_client=mock_llm_client)
+        tasks = [processor.process(f"item_{i}") for i in range(5)]
+        results = await asyncio.gather(*tasks)
+
+        assert len(results) == 5
+        assert all(r is not None for r in results)
+
+    @pytest.mark.asyncio
+    async def test_timeout_handling(self, mock_llm_client):
+        """タイムアウト処理のテスト"""
+        processor = AsyncProcessor(llm_client=mock_llm_client, timeout=0.1)
+
+        with pytest.raises(asyncio.TimeoutError):
+            await processor.slow_operation()
+```
+
+### テスト実行コマンド
+
+```bash
+# 全テスト実行
+uv run pytest tests/ -v
+
+# 特定ファイルのテスト実行
+uv run pytest tests/test_xxx_processor.py -v
+
+# 特定クラスのテスト実行
+uv run pytest tests/test_xxx_processor.py::TestXxxProcessor -v
+
+# 特定テストのみ実行
+uv run pytest tests/test_xxx_processor.py::TestXxxProcessor::test_process_basic -v
+
+# カバレッジ付きで実行
+uv run pytest tests/ --cov=minitools --cov-report=term-missing
+
+# 失敗したテストのみ再実行
+uv run pytest tests/ --lf
+```
+
+### テスト設計のチェックリスト
+
+新機能のテストを作成する際は、以下を確認:
+
+- [ ] **正常系**: 主要な機能が期待通り動作するか
+- [ ] **異常系**: エラー入力時に適切に処理されるか
+- [ ] **エッジケース**: 境界値、空値、None値
+- [ ] **モック**: 外部依存（LLM、API）が適切にモックされているか
+- [ ] **非同期**: async/awaitが正しくテストされているか
+
 ## 設定管理パターン
 
 ### シングルトン Config
