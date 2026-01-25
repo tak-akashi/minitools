@@ -228,6 +228,136 @@ class SlackPublisher:
 
         return message
 
+    def format_arxiv_weekly(
+        self,
+        start_date: str,
+        end_date: str,
+        papers: List[Dict[str, Any]],
+        trend_summary: Optional[str] = None,
+    ) -> str:
+        """
+        ArXiv週次ダイジェストをSlackメッセージ形式にフォーマット
+
+        Args:
+            start_date: 期間開始日（YYYY-MM-DD形式）
+            end_date: 期間終了日（YYYY-MM-DD形式）
+            papers: 上位論文リスト（selection_reason, key_points付き）
+            trend_summary: 今週のAIトレンド概要（省略可）
+
+        Returns:
+            フォーマットされたメッセージ（3000文字以内）
+        """
+        # ランキング用絵文字
+        rank_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+        # ヘッダー
+        message = "📚 *ArXiv週次ダイジェスト*\n"
+        message += f"_{start_date} - {end_date}_\n\n"
+
+        # トレンドセクション（ある場合のみ）
+        if trend_summary:
+            message += "*📈 今週のAIトレンド*\n"
+            # トレンドサマリーを250文字に制限
+            if len(trend_summary) > 250:
+                trend_summary = trend_summary[:247] + "..."
+            message += f"{trend_summary}\n\n"
+
+        if not papers:
+            message += "対象となる論文がありませんでした。\n"
+            return message
+
+        # 論文リスト
+        message += f"*🏆 今週の注目論文 TOP {len(papers)}*\n\n"
+
+        # 文字数制限
+        max_length = 3000
+
+        for i, paper in enumerate(papers, 1):
+            # ランキング表示
+            if i <= 3:
+                rank_display = rank_emoji.get(i, str(i))
+            else:
+                rank_display = f"{i}."
+
+            # タイトル
+            title = paper.get("title", paper.get("タイトル", "タイトルなし"))
+            # タイトルを80文字に制限
+            if len(title) > 80:
+                title = title[:77] + "..."
+
+            # スコア
+            score = paper.get("importance_score", 0)
+
+            # 論文エントリを構築
+            entry = f"*{rank_display} {title}*\n"
+            entry += f"⭐ 総合スコア: {score:.1f}/10\n"
+
+            # 選出理由
+            reason = paper.get("selection_reason", paper.get("score_reason", ""))
+            if reason:
+                # 選出理由を100文字に制限
+                if len(reason) > 100:
+                    reason = reason[:97] + "..."
+                entry += f"📌 選出理由: {reason}\n"
+
+            # 重要ポイント
+            key_points = paper.get("key_points", [])
+            if key_points:
+                entry += "💡 重要ポイント:\n"
+                for point in key_points[:3]:  # 最大3点
+                    # 各ポイントを40文字に制限
+                    if len(point) > 40:
+                        point = point[:37] + "..."
+                    entry += f"  • {point}\n"
+
+            # リンク
+            url = paper.get("url", "")
+            if url:
+                # PDFリンクを生成（arxiv URLからpdf URLに変換）
+                pdf_url = url.replace("/abs/", "/pdf/")
+                if pdf_url == url:
+                    # 変換できなかった場合はPDFリンクなし
+                    entry += f"🔗 <{url}|ArXiv>\n"
+                else:
+                    entry += f"🔗 <{url}|ArXiv> | <{pdf_url}|PDF>\n"
+
+            entry += "\n"
+
+            # 文字数チェック
+            if len(message) + len(entry) > max_length:
+                message += f"_（以降 {len(papers) - i + 1} 件は省略）_\n"
+                break
+
+            message += entry
+
+        return message
+
+    async def send_arxiv_weekly(
+        self,
+        start_date: str,
+        end_date: str,
+        papers: List[Dict[str, Any]],
+        trend_summary: Optional[str] = None,
+        webhook_url: Optional[str] = None,
+    ) -> bool:
+        """
+        ArXiv週次ダイジェストをフォーマットしてSlackに送信
+
+        Args:
+            start_date: 期間開始日
+            end_date: 期間終了日
+            papers: 上位論文リスト
+            trend_summary: トレンド総括（省略可）
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            送信成功の場合True
+        """
+        message = self.format_arxiv_weekly(
+            start_date, end_date, papers, trend_summary
+        )
+        return await self.send_message(message, webhook_url)
+
     async def send_weekly_digest(
         self,
         start_date: str,

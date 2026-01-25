@@ -660,6 +660,68 @@ articles = await reader.get_articles_by_date_range(
     end_date="2024-01-07",
     date_property="Date"
 )
+
+# ArXiv論文を日付範囲で取得
+papers = await reader.get_arxiv_papers_by_date_range(
+    start_date="2024-01-01",
+    end_date="2024-01-07",
+    database_id="xxx"  # 省略時は環境変数から取得
+)
+```
+
+---
+
+## Researchers
+
+### TrendResearcher
+
+Tavily APIを使用して現在のAIトレンドを調査するクラス。
+
+**ファイル:** `minitools/researchers/trend.py`
+
+```python
+class TrendResearcher:
+    """Tavily APIを使用して現在のAIトレンドを調査するクラス"""
+
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        コンストラクタ
+
+        Args:
+            api_key: Tavily APIキー（省略時は環境変数TAVILY_API_KEYから取得）
+        """
+
+    async def get_current_trends(
+        self,
+        query: str = "AI machine learning latest trends breakthroughs",
+        max_results: int = 5
+    ) -> Optional[Dict[str, Any]]:
+        """
+        現在のAIトレンドを調査
+
+        Args:
+            query: 検索クエリ（デフォルト: AI関連のトレンド検索）
+            max_results: 取得する検索結果の最大数
+
+        Returns:
+            トレンド情報の辞書、またはエラー時はNone
+            {
+                "summary": "トレンドの要約（500文字程度）",
+                "topics": ["トピック1", "トピック2", ...],
+                "sources": [{"title": "...", "url": "..."}]
+            }
+        """
+```
+
+**使用例:**
+```python
+researcher = TrendResearcher()
+
+# トレンド調査
+trends = await researcher.get_current_trends()
+if trends:
+    print(f"Summary: {trends['summary']}")
+    print(f"Topics: {trends['topics']}")
 ```
 
 ---
@@ -1107,6 +1169,150 @@ deduped = await deduplicate_articles(
 
 ---
 
+### ArxivWeeklyProcessor
+
+ArXiv週次ダイジェスト生成プロセッサ。
+
+**ファイル:** `minitools/processors/arxiv_weekly.py`
+
+```python
+class ArxivWeeklyProcessor:
+    """ArXiv週次ダイジェスト生成プロセッサ"""
+
+    def __init__(
+        self,
+        llm_client: BaseLLMClient,
+        trend_researcher: Optional[TrendResearcher] = None,
+        max_concurrent: int = 3
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            llm_client: LLMクライアントインスタンス
+            trend_researcher: TrendResearcherインスタンス（省略時は使用しない）
+            max_concurrent: 最大並列処理数（デフォルト: 3）
+        """
+
+    async def rank_papers_by_importance(
+        self,
+        papers: List[Dict[str, Any]],
+        trends: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        各論文に重要度スコア(1-10)を付与
+
+        評価基準（トレンドあり: 4観点、トレンドなし: 3観点）:
+        - 技術的新規性: 新しい手法・アプローチの独創性
+        - 業界インパクト: 実務・産業への影響可能性
+        - 実用性: 実際に使える・応用できる度合い
+        - トレンド関連性: 現在のAIトレンドとの関連度（トレンドありのみ）
+
+        Args:
+            papers: 論文リスト
+            trends: TrendResearcherから取得したトレンド情報
+
+        Returns:
+            importance_scoreが付与された論文リスト
+        """
+
+    async def select_top_papers(
+        self,
+        papers: List[Dict[str, Any]],
+        top_n: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        スコア上位N件を選出
+
+        Args:
+            papers: importance_scoreが付与された論文リスト
+            top_n: 取得する論文数（デフォルト: 10）
+
+        Returns:
+            上位N件の論文リスト
+        """
+
+    async def generate_paper_highlights(
+        self,
+        papers: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        選出理由と重要ポイントを生成
+
+        Args:
+            papers: 論文リスト
+
+        Returns:
+            selection_reason, key_pointsが付与された論文リスト
+        """
+
+    async def process(
+        self,
+        papers: List[Dict[str, Any]],
+        top_n: int = 10,
+        use_trends: bool = True
+    ) -> Dict[str, Any]:
+        """
+        一括処理: トレンド調査 → スコアリング → 選出 → ハイライト生成
+
+        Args:
+            papers: 全論文リスト
+            top_n: 上位論文数（デフォルト: 10）
+            use_trends: Trueの場合、Tavily APIでトレンドを調査してスコアリングに使用
+
+        Returns:
+            処理結果の辞書:
+            - trend_info: トレンド情報（use_trends=Falseの場合はNone）
+            - papers: 上位論文リスト（ハイライト付き）
+            - total_papers: 処理した論文総数
+        """
+```
+
+**使用例:**
+```python
+from minitools.llm import get_llm_client
+from minitools.processors import ArxivWeeklyProcessor
+from minitools.researchers import TrendResearcher
+
+llm = get_llm_client(provider="ollama")
+trend_researcher = TrendResearcher()
+
+processor = ArxivWeeklyProcessor(
+    llm_client=llm,
+    trend_researcher=trend_researcher
+)
+
+result = await processor.process(
+    papers=papers_list,
+    top_n=10,
+    use_trends=True
+)
+
+print(f"Trend summary: {result['trend_info']['summary']}")
+for paper in result['papers']:
+    print(f"{paper['title']} - スコア: {paper['importance_score']}")
+    print(f"  選出理由: {paper['selection_reason']}")
+    print(f"  重要ポイント: {paper['key_points']}")
+```
+
+**CLIオプション:**
+```bash
+# 基本使用
+uv run arxiv-weekly                        # デフォルト設定で実行
+uv run arxiv-weekly --days 14              # 過去14日分を取得
+uv run arxiv-weekly --top 20               # 上位20件を選出
+
+# LLMプロバイダー指定
+uv run arxiv-weekly --provider openai      # OpenAI APIを使用
+
+# オプション
+uv run arxiv-weekly --dry-run              # Slack送信をスキップ
+uv run arxiv-weekly --output out.md        # ファイルに保存
+uv run arxiv-weekly --no-trends            # トレンド調査をスキップ
+```
+
+---
+
 ## Publishers
 
 ### NotionPublisher
@@ -1364,6 +1570,48 @@ class SlackPublisher:
         Returns:
             送信成功の場合True
         """
+
+    def format_arxiv_weekly(
+        self,
+        start_date: str,
+        end_date: str,
+        papers: List[Dict[str, Any]],
+        trend_summary: Optional[str] = None
+    ) -> str:
+        """
+        ArXiv週次ダイジェストをSlackメッセージ形式にフォーマット
+
+        Args:
+            start_date: 期間開始日（YYYY-MM-DD形式）
+            end_date: 期間終了日（YYYY-MM-DD形式）
+            papers: 上位論文リスト（selection_reason, key_points付き）
+            trend_summary: 今週のAIトレンド概要（省略可）
+
+        Returns:
+            フォーマットされたメッセージ（3000文字以内）
+        """
+
+    async def send_arxiv_weekly(
+        self,
+        start_date: str,
+        end_date: str,
+        papers: List[Dict[str, Any]],
+        trend_summary: Optional[str] = None,
+        webhook_url: Optional[str] = None
+    ) -> bool:
+        """
+        ArXiv週次ダイジェストをフォーマットしてSlackに送信
+
+        Args:
+            start_date: 期間開始日
+            end_date: 期間終了日
+            papers: 上位論文リスト
+            trend_summary: トレンド総括（省略可）
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            送信成功の場合True
+        """
 ```
 
 **使用例:**
@@ -1385,6 +1633,14 @@ async with SlackPublisher(webhook_url) as slack:
         end_date="2024-01-15",
         trend_summary="今週のAI分野では...",
         articles=top_articles
+    )
+
+    # ArXiv週次ダイジェストの送信
+    await slack.send_arxiv_weekly(
+        start_date="2024-01-08",
+        end_date="2024-01-15",
+        papers=top_papers,
+        trend_summary="今週のAIトレンド..."
     )
 ```
 

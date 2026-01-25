@@ -29,10 +29,13 @@ minitools/
 │   │   └── langchain_openai.py  # LangChain OpenAI
 │   ├── readers/           # データ読み取りモジュール
 │   │   └── notion.py      # Notionデータベース読み取り
+│   ├── researchers/       # リサーチモジュール
+│   │   └── trend.py       # Tavilyトレンド調査
 │   ├── processors/        # データ処理モジュール
 │   │   ├── translator.py  # 翻訳処理
 │   │   ├── summarizer.py  # 要約処理
 │   │   ├── weekly_digest.py    # 週次ダイジェスト生成
+│   │   ├── arxiv_weekly.py     # ArXiv週次ダイジェスト
 │   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/        # 出力先モジュール
 │   │   ├── notion.py      # Notion連携
@@ -139,7 +142,7 @@ docker-compose run minitools medium --date 2024-01-15
 # Google Alertsの処理
 docker-compose run minitools google-alerts --hours 12
 
-# 週次AIダイジェスト
+# 週次ダイジェスト
 docker-compose run minitools weekly-digest --days 7 --top 20
 
 # YouTube動画の要約（whisper機能付きビルドが必要）
@@ -341,7 +344,7 @@ uv run google-alerts --hours 12
 uv run google-alerts --date 2024-01-15
 ```
 
-#### 週次AIダイジェスト
+#### 週次ダイジェスト
 ```bash
 # 過去7日間の上位20記事をSlackに送信
 weekly-digest
@@ -488,7 +491,7 @@ Google Alertsメールから各アラートを抽出し、日本語要約を付�
 0 */6 * * * cd /path/to/minitools && .venv/bin/google-alerts
 ```
 
-### 週次AIダイジェスト
+### 週次ダイジェスト
 
 NotionのGoogle Alertsデータベースから過去1週間の記事を取得し、AIが重要度を判定して上位記事を選出。週のトレンド総括と各記事の要約をSlackに送信します。
 

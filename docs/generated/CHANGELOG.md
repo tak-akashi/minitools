@@ -5,6 +5,17 @@
 ## [Unreleased]
 
 ### Added
+- **ArXiv週次ダイジェスト機能**: Notion DBから過去1週間分のArXiv論文を取得し、AIが重要度を判定して上位論文を選出。週のトレンド総括と各論文のハイライトをSlackに出力する
+  - 新規コンポーネント:
+    - `minitools/researchers/trend.py` - TrendResearcher（Tavily APIでトレンド調査）
+    - `minitools/processors/arxiv_weekly.py` - ArxivWeeklyProcessor（重要度スコアリング・ハイライト生成）
+    - `scripts/arxiv_weekly.py` - CLIスクリプト
+  - NotionReader拡張: `get_arxiv_papers_by_date_range()` メソッド
+  - SlackPublisher拡張: `format_arxiv_weekly()`, `send_arxiv_weekly()` メソッド
+  - 新規CLIコマンド: `arxiv-weekly`
+  - 新規環境変数: `TAVILY_API_KEY`, `NOTION_ARXIV_DATABASE_ID`, `SLACK_ARXIV_WEEKLY_WEBHOOK_URL`
+  - 設定項目: `defaults.arxiv_weekly.days_back`, `defaults.arxiv_weekly.top_papers`
+
 - **ドキュメント自動生成**: `docs/generated/` に以下のドキュメントを追加
   - `architecture.md` - システムアーキテクチャ設計書
   - `repo-structure.md` - リポジトリ構造定義書

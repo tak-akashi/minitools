@@ -206,6 +206,48 @@ class NotionReader:
             logger.debug(f"Unsupported property type: {prop_type}")
             return None
 
+    async def get_arxiv_papers_by_date_range(
+        self,
+        start_date: str,
+        end_date: str,
+        database_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        ArXiv論文DBから指定期間の論文を全件取得
+
+        Args:
+            start_date: 開始日（YYYY-MM-DD形式）
+            end_date: 終了日（YYYY-MM-DD形式）
+            database_id: NotionデータベースID（省略時は環境変数から取得）
+
+        Returns:
+            論文データの辞書リスト（空の場合は空リスト）
+
+        Raises:
+            NotionReadError: 読み取りに失敗した場合
+        """
+        # データベースIDを取得
+        db_id = database_id or os.getenv("NOTION_ARXIV_DATABASE_ID")
+        if not db_id:
+            raise ValueError(
+                "database_id is required or NOTION_ARXIV_DATABASE_ID must be set"
+            )
+
+        logger.info(
+            f"Fetching ArXiv papers from {start_date} to {end_date}"
+        )
+
+        # 既存のメソッドを「公開日」プロパティで呼び出し
+        papers = await self.get_articles_by_date_range(
+            database_id=db_id,
+            start_date=start_date,
+            end_date=end_date,
+            date_property="公開日",
+        )
+
+        logger.info(f"Fetched {len(papers)} ArXiv papers")
+        return papers
+
     async def get_database_info(self, database_id: str) -> Dict[str, Any]:
         """
         データベースの情報を取得

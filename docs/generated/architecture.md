@@ -26,6 +26,10 @@ flowchart TB
         NR["NotionReader"]
     end
 
+    subgraph Researchers["リサーチレイヤー"]
+        TrendR["TrendResearcher"]
+    end
+
     subgraph LLMLayer["LLM抽象化レイヤー"]
         LLMFactory["get_llm_client()"]
         OC["OllamaClient"]
@@ -36,6 +40,7 @@ flowchart TB
         TR["Translator"]
         SU["Summarizer"]
         WDP["WeeklyDigestProcessor"]
+        AWP["ArxivWeeklyProcessor"]
         DD["DuplicateDetector"]
     end
 
@@ -73,6 +78,8 @@ flowchart TB
     SU <--> OC
     WDP <--> LLMFactory
     WDP --> DD
+    AWP <--> LLMFactory
+    AWP --> TrendR
     DD <--> EmbFactory
     EmbFactory --> OllamaEmb
     EmbFactory --> OpenAIEmb
@@ -82,6 +89,7 @@ flowchart TB
     SU --> NP
     SU --> SP
     WDP --> SP
+    AWP --> SP
 
     NP --> Notion
     SP --> Slack
@@ -97,6 +105,7 @@ flowchart TB
         google_alerts["google_alerts.py"]
         youtube["youtube.py"]
         weekly_digest["weekly_digest.py"]
+        arxiv_weekly["arxiv_weekly.py"]
     end
 
     subgraph collectors["minitools/collectors/"]
@@ -110,7 +119,12 @@ flowchart TB
         TR["Translator"]
         SU["Summarizer"]
         WDP["WeeklyDigestProcessor"]
+        AWP["ArxivWeeklyProcessor"]
         DD["DuplicateDetector"]
+    end
+
+    subgraph researchers["minitools/researchers/"]
+        TrendR["TrendResearcher"]
     end
 
     subgraph publishers["minitools/publishers/"]
@@ -146,6 +160,11 @@ flowchart TB
     weekly_digest --> WDP
     weekly_digest --> SP
 
+    arxiv_weekly --> NR
+    arxiv_weekly --> AWP
+    arxiv_weekly --> TrendR
+    arxiv_weekly --> SP
+
     AC --> Logger
     MC --> Logger
     GAC --> Logger
@@ -157,6 +176,8 @@ flowchart TB
     SU --> Logger
     WDP --> Config
     WDP --> Logger
+    AWP --> Logger
+    TrendR --> Logger
     DD --> Logger
 
     NP --> Logger
@@ -347,6 +368,32 @@ Medium記事のコンテンツ取得に使用。
 - HTMLをMarkdown形式で返却
 - Cloudflareによるブロックあり
 - User-Agentローテーションで回避
+
+### Tavily API
+
+ArXiv週次ダイジェストでのトレンド調査に使用。
+
+**機能:**
+- AI/機械学習分野の最新トレンド検索
+- 検索結果のサマリー生成（`include_answer=True`）
+- トピック抽出
+
+**連携パターン:**
+```python
+from tavily import TavilyClient
+
+client = TavilyClient(api_key=api_key)
+response = client.search(
+    query="AI machine learning latest trends",
+    search_depth="basic",
+    max_results=5,
+    include_answer=True,
+)
+# response: {answer, results: [{title, url, content}, ...]}
+```
+
+**必要な環境変数:**
+- `TAVILY_API_KEY`: Tavily APIキー（オプション、未設定時はトレンド調査をスキップ）
 
 ## 設定システム概要
 
