@@ -33,7 +33,7 @@ async def generate_digest(
     dry_run: bool,
     output_file: str | None,
     no_trends: bool = False,
-) -> None:
+) -> int:
     """
     ArXiv週次ダイジェストを生成
 
@@ -44,6 +44,9 @@ async def generate_digest(
         dry_run: True の場合はSlack送信をスキップ
         output_file: 出力ファイルパス（指定時はファイルに保存）
         no_trends: True の場合はトレンド調査をスキップ
+
+    Returns:
+        実際に処理された論文数
     """
     # 日付範囲を計算
     end_date = datetime.now()
@@ -82,7 +85,7 @@ async def generate_digest(
         print(
             f"期間 {start_date_str} - {end_date_str} に該当する論文がありませんでした。"
         )
-        return
+        return 0
 
     logger.info(f"Found {len(papers)} papers")
 
@@ -144,7 +147,7 @@ async def generate_digest(
         print(message)
         print("\n" + "=" * 60)
         logger.info("Dry run complete - Slack message not sent")
-        return
+        return len(top_papers)
 
     # Slackに送信
     webhook_url = os.getenv("SLACK_ARXIV_WEEKLY_WEBHOOK_URL")
@@ -153,13 +156,14 @@ async def generate_digest(
             "SLACK_ARXIV_WEEKLY_WEBHOOK_URL is not set. Skipping Slack notification."
         )
         print("Slack Webhook URLが設定されていないため、通知をスキップしました。")
-        return
+        return len(top_papers)
 
     async with SlackPublisher(webhook_url=webhook_url) as slack_publisher:
         success = await slack_publisher.send_message(message)
         if success:
             logger.info("ArXiv weekly digest sent to Slack successfully")
             print("ArXiv週次ダイジェストをSlackに送信しました。")
+            return len(top_papers)
         else:
             logger.error("Failed to send ArXiv weekly digest to Slack")
             sys.exit(1)
@@ -237,7 +241,7 @@ Examples:
     logger.info(f"Output file: {args.output or 'None'}")
     logger.info("=" * 60)
 
-    asyncio.run(
+    processed_count = asyncio.run(
         generate_digest(
             days=args.days,
             top_n=args.top,
@@ -248,7 +252,7 @@ Examples:
         )
     )
 
-    logger.info(f"処理完了: {args.top}件の論文を処理しました")
+    logger.info(f"処理完了: {processed_count}件の論文を処理しました")
 
 
 if __name__ == "__main__":
