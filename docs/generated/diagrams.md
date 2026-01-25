@@ -295,6 +295,70 @@ sequenceDiagram
     CLI-->>User: 処理完了
 ```
 
+### ArXiv Weekly Digest 処理フロー
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as scripts/arxiv_weekly.py
+    participant NR as NotionReader
+    participant Notion as Notion DB
+    participant AWP as ArxivWeeklyProcessor
+    participant TrendR as TrendResearcher
+    participant Tavily as Tavily API
+    participant LLM as LLM Client
+    participant SP as SlackPublisher
+    participant Slack
+
+    User->>CLI: arxiv-weekly --days 7 --top 10
+
+    CLI->>NR: get_arxiv_papers_by_date_range(db_id, start, end)
+    NR->>Notion: databases.query(filter=公開日)
+    Notion-->>NR: pages[]
+    NR-->>CLI: papers[]
+
+    CLI->>AWP: process(papers, top_n=10, use_trends=True)
+
+    Note over AWP: 1. トレンド調査
+    AWP->>TrendR: get_current_trends()
+    TrendR->>Tavily: search(query="AI trends", include_answer=True)
+    Tavily-->>TrendR: {answer, results}
+    TrendR-->>AWP: {summary, topics, sources}
+
+    Note over AWP: 2. トレンドサマリー日本語化
+    AWP->>LLM: generate(translate_prompt)
+    LLM-->>AWP: japanese_trend_summary
+
+    Note over AWP: 3. 重要度スコアリング
+    loop 各論文（並列、max=3）
+        AWP->>LLM: chat_json(importance_prompt with trends)
+        LLM-->>AWP: {technical_novelty, industry_impact, practicality, trend_relevance}
+    end
+
+    Note over AWP: 4. 上位N件を選出
+    AWP->>AWP: sorted by importance_score
+
+    Note over AWP: 5. ハイライト生成
+    loop 各上位論文（並列、max=3）
+        AWP->>LLM: chat_json(highlights_prompt)
+        LLM-->>AWP: {selection_reason, key_points}
+    end
+
+    AWP-->>CLI: {trend_info, papers, total_papers}
+
+    CLI->>SP: format_arxiv_weekly(start, end, papers, trend_summary)
+    SP-->>CLI: formatted_message
+
+    alt Slack送信（非dry-run）
+        CLI->>SP: send_message(message)
+        SP->>Slack: POST webhook
+        Slack-->>SP: 200 OK
+        SP-->>CLI: true
+    end
+
+    CLI-->>User: 処理完了
+```
+
 ## クラス関係図
 
 ```mermaid
@@ -460,7 +524,29 @@ classDiagram
         +get_groups()
     }
 
+    class TrendResearcher {
+        +str api_key
+        +TavilyClient client
+        +get_current_trends(query, max_results)
+        -_extract_trends(response)
+        -_generate_summary_from_results(results)
+    }
+
+    class ArxivWeeklyProcessor {
+        +BaseLLMClient llm
+        +TrendResearcher trend_researcher
+        +int max_concurrent
+        +rank_papers_by_importance(papers, trends)
+        +select_top_papers(papers, top_n)
+        +generate_paper_highlights(papers)
+        +process(papers, top_n, use_trends)
+        -_translate_trend_summary(trend_info)
+        -_safe_get_score(value, default)
+    }
+
     DuplicateDetector --> UnionFind : uses
+    ArxivWeeklyProcessor --> TrendResearcher : uses
+    ArxivWeeklyProcessor --> BaseLLMClient : uses
 
     class BaseLLMClient {
         <<abstract>>

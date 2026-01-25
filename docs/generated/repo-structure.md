@@ -25,11 +25,15 @@ minitools/
 │   ├── readers/                    # 読み取りレイヤー
 │   │   ├── __init__.py
 │   │   └── notion.py              # Notionデータベース読み取り
+│   ├── researchers/                # リサーチレイヤー
+│   │   ├── __init__.py
+│   │   └── trend.py               # Tavily APIでトレンド調査
 │   ├── processors/                 # コンテンツ処理レイヤー
 │   │   ├── __init__.py
 │   │   ├── translator.py          # Ollama翻訳
 │   │   ├── summarizer.py          # Ollama要約
 │   │   ├── weekly_digest.py       # 週次ダイジェスト生成
+│   │   ├── arxiv_weekly.py        # ArXiv週次ダイジェスト生成
 │   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/                 # 出力レイヤー
 │   │   ├── __init__.py
@@ -45,7 +49,8 @@ minitools/
 │   ├── medium.py                  # medium コマンド
 │   ├── google_alerts.py           # google-alerts コマンド
 │   ├── youtube.py                 # youtube コマンド
-│   └── weekly_digest.py           # weekly-digest コマンド
+│   ├── weekly_digest.py           # weekly-digest コマンド
+│   └── arxiv_weekly.py            # arxiv-weekly コマンド
 │
 ├── docs/                           # ドキュメント
 │   ├── generated/                 # 生成ドキュメント
@@ -110,6 +115,14 @@ Ollama/OpenAIを統一的に扱うための抽象化レイヤー。
 |-----------|------|------------|
 | `notion.py` | Notionデータベースからの記事取得 | Notion API |
 
+#### researchers/ (リサーチ)
+
+外部APIを使用してリサーチを行うモジュール群。
+
+| モジュール | 役割 | 外部サービス |
+|-----------|------|------------|
+| `trend.py` | AI/機械学習分野のトレンド調査 | Tavily API |
+
 #### processors/ (コンテンツ処理)
 
 LLMを使用してコンテンツを処理するモジュール群。
@@ -119,6 +132,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 | `translator.py` | テキストの日本語翻訳 | gemma3:27b (Ollama) |
 | `summarizer.py` | テキストの要約・キーポイント抽出 | gemma3:27b (Ollama) |
 | `weekly_digest.py` | 週次ダイジェスト生成 | LLM抽象化レイヤー経由 |
+| `arxiv_weekly.py` | ArXiv週次ダイジェスト生成 | LLM抽象化レイヤー経由 |
 | `duplicate_detector.py` | 類似記事検出・重複除去 | Embedding抽象化レイヤー経由 |
 
 #### publishers/ (出力)
@@ -149,7 +163,8 @@ LLMを使用してコンテンツを処理するモジュール群。
 | `medium.py` | `medium` | Medium記事の収集・翻訳・保存 |
 | `google_alerts.py` | `google-alerts` | Google Alertsの収集・翻訳・保存 |
 | `youtube.py` | `youtube` | YouTube動画の文字起こし・要約 |
-| `weekly_digest.py` | `weekly-digest` | 週次AIダイジェストの生成・Slack通知 |
+| `weekly_digest.py` | `weekly-digest` | 週次ダイジェストの生成・Slack通知 |
+| `arxiv_weekly.py` | `arxiv-weekly` | ArXiv週次ダイジェストの生成・Slack通知 |
 
 ## 新規コンポーネント追加手順
 

@@ -9,6 +9,7 @@ from minitools.processors.duplicate_detector import (
     DuplicateDetector,
     deduplicate_articles,
 )
+from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
 
 __all__ = [
     "Translator",
@@ -16,4 +17,5 @@ __all__ = [
     "WeeklyDigestProcessor",
     "DuplicateDetector",
     "deduplicate_articles",
+    "ArxivWeeklyProcessor",
 ]
