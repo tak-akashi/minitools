@@ -44,6 +44,8 @@ async def main_async():
                        help='デバッグモードで実行')
     parser.add_argument('--test', action='store_true',
                        help='テストモード（最初の1記事のみ処理）')
+    parser.add_argument('--use-jina', action='store_true',
+                       help='Jina AI Readerを使用して記事本文を取得（デフォルトはメールのプレビューを使用）')
 
     args = parser.parse_args()
 
@@ -102,29 +104,43 @@ async def main_async():
         if args.test:
             articles = articles[:1]
             logger.info("テストモード: 最初の1記事のみ処理します")
-        
+
+        # Jina Reader使用設定（コマンドラインオプション > 設定ファイル）
+        use_jina_reader = args.use_jina or config.get('defaults.medium.use_jina_reader', False)
+        if use_jina_reader:
+            logger.info("Jina AI Readerを使用して記事本文を取得します")
+        else:
+            logger.info("メールのプレビューテキストを使用します（Jina Readerはスキップ）")
+
         # 翻訳と要約
         translator = Translator()
         processed_articles = []
-        
+
         logger.info("記事の翻訳と要約を開始します...")
         # バッチ処理のための設定
-        batch_size = 5  # 並列処理する記事数（bot検出回避のため削減）
+        batch_size = 10 if not use_jina_reader else 5  # Jina不使用時は並列数を増やせる
         total_batches = (len(articles) + batch_size - 1) // batch_size
-        
+
         async def process_article(article, index, total):
             """個別記事の処理"""
             try:
                 logger.info(f"  記事 {index}/{total} 処理開始: {article.title[:50]}...")
-                # 記事内容を取得
-                content, author = await collector.fetch_article_content(article.url)
-                if author:
-                    article.author = author
 
-                # コンテンツ取得失敗時はメールのプレビューをフォールバックとして使用
-                if not content and article.preview:
+                content = ""
+                author = None
+
+                # Jina Readerを使用する場合のみ記事内容を取得
+                if use_jina_reader:
+                    content, author = await collector.fetch_article_content(article.url)
+                    if author:
+                        article.author = author
+                    # コンテンツ取得失敗時はメールのプレビューをフォールバックとして使用
+                    if not content and article.preview:
+                        content = article.preview
+                        logger.info(f"  -> プレビューをフォールバックとして使用: {len(content)} chars")
+                else:
+                    # Jina Readerを使用しない場合はプレビューを直接使用
                     content = article.preview
-                    logger.info(f"  -> プレビューをフォールバックとして使用: {len(content)} chars")
 
                 # 翻訳と要約
                 if content:
