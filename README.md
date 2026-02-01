@@ -344,7 +344,7 @@ uv run google-alerts --hours 12
 uv run google-alerts --date 2024-01-15
 ```
 
-#### 週次ダイジェスト
+#### Google Alerts週次ダイジェスト
 ```bash
 # 過去7日間の上位20記事をSlackに送信
 weekly-digest
@@ -356,6 +356,23 @@ uv run weekly-digest --dry-run
 
 # 重複除去を無効化
 uv run weekly-digest --no-deduplicate
+```
+
+#### ArXiv週次ダイジェスト
+```bash
+# 過去7日間の上位10論文をSlackに送信
+arxiv-weekly
+# または
+uv run arxiv-weekly --days 7 --top 10
+
+# プレビュー（Slackに送信しない）
+uv run arxiv-weekly --dry-run
+
+# Tavilyトレンド調査をスキップ
+uv run arxiv-weekly --no-trends
+
+# OpenAIを使用してスコアリング
+uv run arxiv-weekly --provider openai
 ```
 
 #### YouTube要約
@@ -511,6 +528,29 @@ NotionのGoogle Alertsデータベースから過去1週間の記事を取得し
 ```bash
 # 毎週月曜日9時に実行
 0 9 * * 1 cd /path/to/minitools && /path/to/uv run weekly-digest
+```
+
+### ArXiv週次ダイジェスト
+
+NotionのArXivデータベースから過去1週間の論文を取得し、AIが重要度を判定して上位論文を選出。週のトレンド総括と各論文の要約をSlackに送信します。
+
+**特徴**:
+- Tavilyを使用した最新AIトレンドの調査
+- トレンドに基づく論文の重要度スコアリング
+- LLMによる多角的評価（技術的影響、実用性、革新性等）
+- Ollama/OpenAI両対応
+
+**オプション**:
+- `--days`: 集計対象の日数（デフォルト: 7）
+- `--top`: 上位論文数（デフォルト: 10）
+- `--dry-run`: プレビューモード（Slackに送信しない）
+- `--no-trends`: Tavilyトレンド調査をスキップ
+- `--provider`: LLMプロバイダーの選択（ollama/openai）
+
+**定期実行の設定例（cron）**:
+```bash
+# 毎週月曜日10時に実行
+0 10 * * 1 cd /path/to/minitools && /path/to/uv run arxiv-weekly
 ```
 
 ### YouTube要約ツール
