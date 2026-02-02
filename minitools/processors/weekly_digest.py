@@ -14,7 +14,7 @@ from minitools.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 重要度判定プロンプト
+# 重要度判定プロンプト（単一記事用）
 IMPORTANCE_PROMPT_TEMPLATE = """あなたはAI/テクノロジーニュースの専門アナリストです。
 以下の記事の重要度を評価してください。
 
@@ -36,6 +36,36 @@ IMPORTANCE_PROMPT_TEMPLATE = """あなたはAI/テクノロジーニュースの
   "trending": <1-10の整数>,
   "novelty": <1-10の整数>,
   "reason": "<50文字以内の簡潔な評価理由>"
+}}
+"""
+
+# バッチスコアリング用プロンプトテンプレート
+BATCH_IMPORTANCE_PROMPT_TEMPLATE = """あなたはAI/テクノロジーニュースの専門アナリストです。
+以下の{count}件の記事それぞれの重要度を評価してください。
+
+## 評価基準（各項目1-10点）
+1. **技術的影響度**: 技術的なブレークスルーや革新性の程度
+2. **業界インパクト**: 業界全体への影響範囲と深刻度
+3. **話題性**: 現在の注目度、メディアでの言及頻度
+4. **新規性**: 新しい発見・発表か、既存情報の焼き直しか
+
+## 記事リスト
+{articles_text}
+
+## 回答形式
+以下のJSON形式で回答してください。必ず全{count}件の記事について回答してください:
+{{
+  "results": [
+    {{
+      "index": 0,
+      "technical_impact": <1-10の整数>,
+      "industry_impact": <1-10の整数>,
+      "trending": <1-10の整数>,
+      "novelty": <1-10の整数>,
+      "reason": "<50文字以内の簡潔な評価理由>"
+    }},
+    ...
+  ]
 }}
 """
 
@@ -73,18 +103,24 @@ class WeeklyDigestProcessor:
         llm_client: BaseLLMClient,
         embedding_client: Optional[BaseEmbeddingClient] = None,
         max_concurrent: int = 3,
+        batch_size: Optional[int] = None,
     ):
         """
         Args:
             llm_client: LLMクライアントインスタンス
             embedding_client: Embeddingクライアント（省略時は自動生成）
             max_concurrent: 最大並列処理数（デフォルト: 3）
+            batch_size: バッチスコアリングのサイズ（省略時は設定ファイルから取得）
         """
         self.llm = llm_client
         self.embedding_client = embedding_client
         config = get_config()
         self.max_concurrent = max_concurrent or config.get(
             "processing.max_concurrent_ollama", 3
+        )
+        # バッチサイズ設定
+        self.batch_size = batch_size or config.get(
+            "defaults.weekly_digest.batch_size", 20
         )
         # 重複除去設定
         self.dedup_enabled = config.get("weekly_digest.deduplication.enabled", True)
@@ -97,15 +133,188 @@ class WeeklyDigestProcessor:
         logger.info(
             f"WeeklyDigestProcessor initialized "
             f"(max_concurrent={self.max_concurrent}, "
+            f"batch_size={self.batch_size}, "
             f"dedup_enabled={self.dedup_enabled})"
         )
+
+    def _safe_get_score(self, value: Any, default: int = 5) -> int:
+        """
+        スコア値を安全に取得（型チェックと変換）
+
+        Args:
+            value: スコア値（整数、文字列、Noneなど）
+            default: デフォルト値
+
+        Returns:
+            1-10の範囲の整数スコア
+        """
+        if value is None:
+            return default
+
+        if isinstance(value, int):
+            return max(1, min(10, value))
+
+        if isinstance(value, str):
+            try:
+                num_value = float(value)
+                return max(1, min(10, int(num_value)))
+            except (ValueError, TypeError):
+                return default
+
+        if isinstance(value, float):
+            return max(1, min(10, int(value)))
+
+        return default
+
+    async def _score_single(self, article: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        単一記事をスコアリング（フォールバック用）
+
+        Args:
+            article: 記事データ
+
+        Returns:
+            スコア付き記事データ
+        """
+        title = article.get("title", article.get("original_title", ""))
+        summary = article.get("summary", article.get("snippet", ""))
+
+        if not title:
+            logger.warning("Article without title, assigning score 0")
+            article["importance_score"] = 0
+            article["score_reason"] = "タイトルなし"
+            return article
+
+        prompt = IMPORTANCE_PROMPT_TEMPLATE.format(
+            title=title,
+            summary=summary[:500] if summary else "要約なし",
+        )
+
+        try:
+            if hasattr(self.llm, "chat_json"):
+                response = await self.llm.chat_json(
+                    [{"role": "user", "content": prompt}]
+                )
+            else:
+                response = await self.llm.generate(prompt)
+
+            result = json.loads(response)
+
+            scores = [
+                self._safe_get_score(result.get("technical_impact"), 5),
+                self._safe_get_score(result.get("industry_impact"), 5),
+                self._safe_get_score(result.get("trending"), 5),
+                self._safe_get_score(result.get("novelty"), 5),
+            ]
+            avg_score = sum(scores) / len(scores)
+
+            article["importance_score"] = round(avg_score, 1)
+            article["score_reason"] = result.get("reason", "")
+            article["score_details"] = result
+
+            logger.debug(f"Scored (single) '{title[:40]}...': {article['importance_score']}")
+
+        except (json.JSONDecodeError, LLMError, TypeError, ValueError) as e:
+            logger.warning(
+                f"Failed to score article (single) '{title[:40]}...': {type(e).__name__}: {e}"
+            )
+            article["importance_score"] = 5.0
+            article["score_reason"] = "スコアリング失敗"
+
+        return article
+
+    async def _score_batch(
+        self, articles: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        複数記事を1回のLLM呼び出しでスコアリング
+
+        Args:
+            articles: 記事リスト（最大batch_size件）
+
+        Returns:
+            スコア付き記事リスト
+
+        Raises:
+            json.JSONDecodeError: レスポンスのパース失敗時
+            LLMError: LLM API呼び出し失敗時
+        """
+        if not articles:
+            return []
+
+        # 記事リストをテキスト化
+        articles_text_parts = []
+        for i, article in enumerate(articles):
+            title = article.get("title", article.get("original_title", ""))
+            summary = article.get("summary", article.get("snippet", ""))
+            articles_text_parts.append(
+                f"[{i}] タイトル: {title}\n    要約: {summary[:300] if summary else '要約なし'}"
+            )
+
+        articles_text = "\n\n".join(articles_text_parts)
+
+        prompt = BATCH_IMPORTANCE_PROMPT_TEMPLATE.format(
+            count=len(articles),
+            articles_text=articles_text,
+        )
+
+        # LLM呼び出し
+        if hasattr(self.llm, "chat_json"):
+            response = await self.llm.chat_json(
+                [{"role": "user", "content": prompt}]
+            )
+        else:
+            response = await self.llm.generate(prompt)
+
+        # JSONパース（失敗時は例外をそのまま上げる）
+        parsed = json.loads(response)
+
+        # オブジェクト形式 {"results": [...]} または配列形式 [...] の両方に対応
+        if isinstance(parsed, dict) and "results" in parsed:
+            results = parsed["results"]
+        elif isinstance(parsed, list):
+            results = parsed
+        else:
+            raise json.JSONDecodeError("Expected JSON object with 'results' key or JSON array", response, 0)
+
+        if not isinstance(results, list):
+            raise json.JSONDecodeError("Expected results to be a list", response, 0)
+
+        # 結果を記事にマッピング
+        result_map = {r.get("index", -1): r for r in results}
+
+        for i, article in enumerate(articles):
+            title = article.get("title", article.get("original_title", ""))
+
+            if i in result_map:
+                result = result_map[i]
+                scores = [
+                    self._safe_get_score(result.get("technical_impact"), 5),
+                    self._safe_get_score(result.get("industry_impact"), 5),
+                    self._safe_get_score(result.get("trending"), 5),
+                    self._safe_get_score(result.get("novelty"), 5),
+                ]
+                avg_score = sum(scores) / len(scores)
+
+                article["importance_score"] = round(avg_score, 1)
+                article["score_reason"] = result.get("reason", "")
+                article["score_details"] = result
+
+                logger.debug(f"Scored (batch) '{title[:40]}...': {article['importance_score']}")
+            else:
+                # indexが見つからない場合はデフォルトスコア
+                logger.warning(f"Missing score for index {i}, using default")
+                article["importance_score"] = 5.0
+                article["score_reason"] = "スコアリング結果なし"
+
+        return articles
 
     async def rank_articles_by_importance(
         self,
         articles: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        各記事に重要度スコア(1-10)を付与
+        各記事に重要度スコア(1-10)を付与（バッチ処理対応）
 
         Args:
             articles: 記事データのリスト
@@ -116,105 +325,63 @@ class WeeklyDigestProcessor:
         if not articles:
             return []
 
-        logger.info(f"Ranking {len(articles)} articles by importance...")
+        logger.info(
+            f"Ranking {len(articles)} articles by importance "
+            f"(batch_size={self.batch_size})..."
+        )
         semaphore = asyncio.Semaphore(self.max_concurrent)
 
-        def safe_get_score(value: Any, default: int = 5) -> int:
-            """
-            スコア値を安全に取得（型チェックと変換）
+        # 記事をバッチに分割
+        batches = [
+            articles[i : i + self.batch_size]
+            for i in range(0, len(articles), self.batch_size)
+        ]
+        logger.info(f"Split into {len(batches)} batches")
 
-            Args:
-                value: スコア値（整数、文字列、Noneなど）
-                default: デフォルト値
-
-            Returns:
-                1-10の範囲の整数スコア
-            """
-            if value is None:
-                return default
-
-            # 整数型の場合はそのまま使用
-            if isinstance(value, int):
-                return max(1, min(10, value))  # 1-10の範囲に制限
-
-            # 文字列の場合は数値に変換を試みる
-            if isinstance(value, str):
-                try:
-                    # 数値文字列を変換
-                    num_value = float(value)
-                    return max(1, min(10, int(num_value)))
-                except (ValueError, TypeError):
-                    # 変換できない場合はデフォルト値
-                    return default
-
-            # 浮動小数点数の場合は整数に変換
-            if isinstance(value, float):
-                return max(1, min(10, int(value)))
-
-            # その他の型はデフォルト値
-            return default
-
-        async def score_article(article: Dict[str, Any]) -> Dict[str, Any]:
+        async def process_batch(
+            batch: List[Dict[str, Any]], batch_idx: int
+        ) -> List[Dict[str, Any]]:
+            """バッチを処理し、失敗時は個別処理にフォールバック"""
             async with semaphore:
-                title = article.get("title", article.get("original_title", ""))
-                summary = article.get("summary", article.get("snippet", ""))
-
-                if not title:
-                    logger.warning("Article without title, assigning score 0")
-                    article["importance_score"] = 0
-                    article["score_reason"] = "タイトルなし"
-                    return article
-
-                prompt = IMPORTANCE_PROMPT_TEMPLATE.format(
-                    title=title,
-                    summary=summary[:500] if summary else "要約なし",
-                )
-
                 try:
-                    # chat_jsonメソッドがあれば使用、なければ通常のgenerateを使用
-                    if hasattr(self.llm, "chat_json"):
-                        response = await self.llm.chat_json(
-                            [{"role": "user", "content": prompt}]
-                        )
-                    else:
-                        response = await self.llm.generate(prompt)
-
-                    # JSONをパース
-                    result = json.loads(response)
-
-                    # スコアを計算（4観点の平均）
-                    # 型安全にスコア値を取得
-                    scores = [
-                        safe_get_score(result.get("technical_impact"), 5),
-                        safe_get_score(result.get("industry_impact"), 5),
-                        safe_get_score(result.get("trending"), 5),
-                        safe_get_score(result.get("novelty"), 5),
-                    ]
-                    avg_score = sum(scores) / len(scores)
-
-                    article["importance_score"] = round(avg_score, 1)
-                    article["score_reason"] = result.get("reason", "")
-                    article["score_details"] = result
-
-                    logger.debug(
-                        f"Scored '{title[:40]}...': {article['importance_score']}"
-                    )
+                    # バッチ処理を試行
+                    result = await self._score_batch(batch)
+                    logger.debug(f"Batch {batch_idx + 1} scored successfully")
+                    return result
 
                 except (json.JSONDecodeError, LLMError, TypeError, ValueError) as e:
+                    # バッチ処理失敗時は個別処理へフォールバック
                     logger.warning(
-                        f"Failed to score article '{title[:40]}...': {type(e).__name__}: {e}"
+                        f"Batch {batch_idx + 1} failed ({type(e).__name__}), "
+                        f"falling back to individual scoring"
                     )
-                    article["importance_score"] = 5  # デフォルトスコア
-                    article["score_reason"] = "スコアリング失敗"
+                    results = []
+                    for article in batch:
+                        try:
+                            scored = await self._score_single(article)
+                            results.append(scored)
+                        except Exception as e2:
+                            logger.warning(
+                                f"Individual scoring failed: {type(e2).__name__}: {e2}"
+                            )
+                            article["importance_score"] = 5.0
+                            article["score_reason"] = "スコアリング失敗"
+                            results.append(article)
+                    return results
 
-                return article
+        # 全バッチを並列処理
+        tasks = [
+            process_batch(batch, idx) for idx, batch in enumerate(batches)
+        ]
+        batch_results = await asyncio.gather(*tasks)
 
-        # 全記事を並列処理
-        tasks = [score_article(article) for article in articles]
-        scored_articles = await asyncio.gather(*tasks)
+        # バッチ結果を平坦化
+        scored_articles = []
+        for batch_result in batch_results:
+            scored_articles.extend(batch_result)
 
         logger.info(f"Completed scoring {len(scored_articles)} articles")
-        return list(scored_articles)
+        return scored_articles
 
     async def select_top_articles(
         self,

@@ -878,7 +878,7 @@ points = await summarizer.extract_key_points(
 
 ### WeeklyDigestProcessor
 
-週次ダイジェストを生成するプロセッサ。
+週次ダイジェストを生成するプロセッサ。バッチ処理により高速なスコアリングを実現。
 
 **ファイル:** `minitools/processors/weekly_digest.py`
 
@@ -890,7 +890,8 @@ class WeeklyDigestProcessor:
         self,
         llm_client: BaseLLMClient,
         embedding_client: Optional[BaseEmbeddingClient] = None,
-        max_concurrent: int = 3
+        max_concurrent: int = 3,
+        batch_size: Optional[int] = None
     ):
         """
         コンストラクタ
@@ -899,6 +900,7 @@ class WeeklyDigestProcessor:
             llm_client: LLMクライアントインスタンス
             embedding_client: Embeddingクライアント（省略時は自動生成）
             max_concurrent: 最大並列処理数（デフォルト: 3）
+            batch_size: バッチスコアリングのサイズ（省略時は設定ファイルから取得、デフォルト: 20）
         """
 
     async def rank_articles_by_importance(
@@ -906,7 +908,11 @@ class WeeklyDigestProcessor:
         articles: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
-        各記事に重要度スコア(1-10)を付与
+        各記事に重要度スコア(1-10)を付与（バッチ処理対応）
+
+        バッチ処理により複数記事を1回のLLM呼び出しでスコアリングし、
+        処理時間を大幅に短縮します。バッチ処理が失敗した場合は
+        自動的に個別処理にフォールバックします。
 
         Args:
             articles: 記事データのリスト
@@ -1014,18 +1020,18 @@ for article in result['top_articles']:
 **CLIオプション:**
 ```bash
 # 基本使用
-uv run weekly-digest                              # デフォルト設定で実行
-uv run weekly-digest --days 14                    # 過去14日分を取得
-uv run weekly-digest --top 10                     # 上位10件を選出
+uv run google-alert-weekly-digest                 # デフォルト設定で実行
+uv run google-alert-weekly-digest --days 14       # 過去14日分を取得
+uv run google-alert-weekly-digest --top 10        # 上位10件を選出
 
 # LLMプロバイダー指定
-uv run weekly-digest --provider openai            # OpenAI APIを使用
-uv run weekly-digest --embedding openai           # Embeddingのみ OpenAI を使用
+uv run google-alert-weekly-digest --provider openai  # OpenAI APIを使用
+uv run google-alert-weekly-digest --embedding openai # Embeddingのみ OpenAI を使用
 
 # オプション
-uv run weekly-digest --dry-run                    # Slack送信をスキップ
-uv run weekly-digest --output out.md              # ファイルに保存
-uv run weekly-digest --no-dedup                   # 類似記事除去をスキップ
+uv run google-alert-weekly-digest --dry-run       # Slack送信をスキップ
+uv run google-alert-weekly-digest --output out.md # ファイルに保存
+uv run google-alert-weekly-digest --no-dedup      # 類似記事除去をスキップ
 ```
 
 ---
@@ -1171,7 +1177,7 @@ deduped = await deduplicate_articles(
 
 ### ArxivWeeklyProcessor
 
-ArXiv週次ダイジェスト生成プロセッサ。
+ArXiv週次ダイジェスト生成プロセッサ。バッチ処理により高速なスコアリングを実現。
 
 **ファイル:** `minitools/processors/arxiv_weekly.py`
 
@@ -1183,7 +1189,8 @@ class ArxivWeeklyProcessor:
         self,
         llm_client: BaseLLMClient,
         trend_researcher: Optional[TrendResearcher] = None,
-        max_concurrent: int = 3
+        max_concurrent: int = 3,
+        batch_size: Optional[int] = None
     ):
         """
         コンストラクタ
@@ -1192,6 +1199,7 @@ class ArxivWeeklyProcessor:
             llm_client: LLMクライアントインスタンス
             trend_researcher: TrendResearcherインスタンス（省略時は使用しない）
             max_concurrent: 最大並列処理数（デフォルト: 3）
+            batch_size: バッチスコアリングのサイズ（省略時は設定ファイルから取得、デフォルト: 20）
         """
 
     async def rank_papers_by_importance(
@@ -1200,7 +1208,11 @@ class ArxivWeeklyProcessor:
         trends: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
-        各論文に重要度スコア(1-10)を付与
+        各論文に重要度スコア(1-10)を付与（バッチ処理対応）
+
+        バッチ処理により複数論文を1回のLLM呼び出しでスコアリングし、
+        処理時間を大幅に短縮します。バッチ処理が失敗した場合は
+        自動的に個別処理にフォールバックします。
 
         評価基準（トレンドあり: 4観点、トレンドなし: 3観点）:
         - 技術的新規性: 新しい手法・アプローチの独創性

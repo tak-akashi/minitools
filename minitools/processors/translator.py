@@ -61,7 +61,8 @@ class Translator:
                 )
             )
             
-            translation = response.message.content.strip()
+            content = response.message.content or ""
+            translation = content.strip()
             logger.debug(f"Translated text: {translation[:100]}...")
             return translation
             
@@ -113,7 +114,8 @@ Example:
                 )
             )
             
-            result = json.loads(response.message.content)
+            content = response.message.content or "{}"
+            result = json.loads(content)
             logger.info(f"Translated and summarized: {title[:50]}...")
             return {
                 "japanese_title": result.get('japanese_title', "翻訳失敗"),

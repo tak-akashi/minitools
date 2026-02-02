@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Weekly AI Digest - Generate weekly summary of AI news from Notion DB.
+Google Alert Weekly Digest - Generate weekly summary of Google Alerts from Notion DB.
 
 Usage:
-    uv run minitools-weekly-digest --days 7 --top 20
-    uv run minitools-weekly-digest --provider openai --dry-run
-    uv run minitools-weekly-digest --output outputs/digest.md
+    uv run google-alert-weekly-digest --days 7 --top 20
+    uv run google-alert-weekly-digest --provider openai --dry-run
+    uv run google-alert-weekly-digest --output outputs/digest.md
 """
 
 import argparse
@@ -22,7 +22,7 @@ from minitools.readers.notion import NotionReader
 from minitools.utils.config import get_config
 from minitools.utils.logger import setup_logger
 
-logger = setup_logger(name="scripts.weekly_digest", log_file="weekly_digest.log")
+logger = setup_logger(name="scripts.google_alert_weekly_digest", log_file="google_alert_weekly_digest.log")
 
 
 async def generate_digest(
@@ -110,7 +110,7 @@ async def generate_digest(
     result = await processor.process(
         articles=articles,
         top_n=top_n,
-        deduplicate=not no_dedup if no_dedup else None,
+        deduplicate=False if no_dedup else None,
     )
 
     trend_summary = result["trend_summary"]
@@ -171,14 +171,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  uv run weekly-digest                              # デフォルト設定で実行
-  uv run weekly-digest --days 14                    # 過去14日分を取得
-  uv run weekly-digest --top 10                     # 上位10件を選出
-  uv run weekly-digest --provider openai            # OpenAI APIを使用
-  uv run weekly-digest --embedding openai           # Embeddingのみ OpenAI を使用
-  uv run weekly-digest --dry-run                    # Slack送信をスキップ
-  uv run weekly-digest --output out.md              # ファイルに保存
-  uv run weekly-digest --no-dedup                   # 類似記事除去をスキップ
+  uv run google-alert-weekly-digest                              # デフォルト設定で実行
+  uv run google-alert-weekly-digest --days 14                    # 過去14日分を取得
+  uv run google-alert-weekly-digest --top 10                     # 上位10件を選出
+  uv run google-alert-weekly-digest --provider openai            # OpenAI APIを使用
+  uv run google-alert-weekly-digest --embedding openai           # Embeddingのみ OpenAI を使用
+  uv run google-alert-weekly-digest --dry-run                    # Slack送信をスキップ
+  uv run google-alert-weekly-digest --output out.md              # ファイルに保存
+  uv run google-alert-weekly-digest --no-dedup                   # 類似記事除去をスキップ
         """,
     )
 
@@ -196,11 +196,16 @@ Examples:
         help="上位何件の記事を選出するか（デフォルト: 20）",
     )
 
+    # プロバイダーのデフォルト値: weekly_digest.provider → llm.provider の順でフォールバック
+    default_provider = config.get(
+        "defaults.weekly_digest.provider",
+        config.get("llm.provider", "ollama")
+    )
     parser.add_argument(
         "--provider",
         choices=["ollama", "openai"],
-        default=config.get("llm.provider", "ollama"),
-        help="LLMプロバイダー（デフォルト: 設定ファイルの値）",
+        default=default_provider,
+        help=f"LLMプロバイダー（デフォルト: {default_provider}）",
     )
 
     parser.add_argument(
@@ -232,7 +237,7 @@ Examples:
     args = parser.parse_args()
 
     logger.info("=" * 60)
-    logger.info("Weekly AI Digest")
+    logger.info("Google Alert Weekly Digest")
     logger.info("=" * 60)
     logger.info(f"Days: {args.days}")
     logger.info(f"Top articles: {args.top}")

@@ -104,7 +104,7 @@ flowchart TB
         medium["medium.py"]
         google_alerts["google_alerts.py"]
         youtube["youtube.py"]
-        weekly_digest["weekly_digest.py"]
+        google_alert_weekly_digest["google_alert_weekly_digest.py"]
         arxiv_weekly["arxiv_weekly.py"]
     end
 
@@ -156,9 +156,9 @@ flowchart TB
     youtube --> SU
     youtube --> TR
 
-    weekly_digest --> NR
-    weekly_digest --> WDP
-    weekly_digest --> SP
+    google_alert_weekly_digest --> NR
+    google_alert_weekly_digest --> WDP
+    google_alert_weekly_digest --> SP
 
     arxiv_weekly --> NR
     arxiv_weekly --> AWP
@@ -483,6 +483,31 @@ flowchart TB
 | Ollama API | 3 | `processing.max_concurrent_ollama` |
 | Notion API | 3 | `processing.max_concurrent_notion` |
 | HTTP接続 | 10 | `processing.max_concurrent_http` |
+
+### バッチスコアリング
+
+週次ダイジェスト（`WeeklyDigestProcessor`, `ArxivWeeklyProcessor`）では、バッチ処理により複数記事/論文を1回のLLM呼び出しでスコアリングします。
+
+```mermaid
+flowchart LR
+    A["500件の記事"] --> B["バッチ分割\n(20件ずつ)"]
+    B --> C["25バッチ"]
+    C --> D["LLM API\n並列呼び出し\n(max: 3)"]
+    D --> E["スコア付き記事"]
+    E --> F["上位N件選出\n+ 重複除去"]
+```
+
+| 設定項目 | デフォルト値 | 設定キー |
+|---------|------------|---------|
+| バッチサイズ（週次ダイジェスト） | 20 | `defaults.weekly_digest.batch_size` |
+| バッチサイズ（ArXiv週次） | 20 | `defaults.arxiv_weekly.batch_size` |
+| デフォルトプロバイダー（週次ダイジェスト） | openai | `defaults.weekly_digest.provider` |
+| デフォルトプロバイダー（ArXiv週次） | openai | `defaults.arxiv_weekly.provider` |
+
+**エラーハンドリング:**
+- バッチ処理が失敗した場合、自動的に個別処理にフォールバック
+- 個別処理も失敗した場合、デフォルトスコア（5.0）を付与
+- 部分的な失敗でも処理は継続
 
 ## デプロイメントアーキテクチャ
 

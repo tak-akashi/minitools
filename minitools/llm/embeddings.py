@@ -212,7 +212,8 @@ def get_embedding_client(provider: Optional[str] = None) -> BaseEmbeddingClient:
         ValueError: 未対応のプロバイダーが指定された場合
     """
     config = get_config()
-    use_provider = provider or config.get("llm.provider", "ollama")
+    # embedding.provider を優先、なければ llm.provider にフォールバック
+    use_provider = provider or config.get("embedding.provider") or config.get("llm.provider", "ollama")
 
     logger.info(f"Creating embedding client: provider={use_provider}")
 
