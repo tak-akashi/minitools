@@ -4,7 +4,19 @@
 
 ## [Unreleased]
 
+### Changed
+- **週次ダイジェストスクリプトのリネーム**: `scripts/weekly_digest.py` → `scripts/google_alert_weekly_digest.py`
+  - CLIコマンド: `weekly-digest` → `google-alert-weekly-digest`
+  - 目的: Google Alerts専用であることを明確化
+
 ### Added
+- **バッチスコアリング機能**: `WeeklyDigestProcessor` と `ArxivWeeklyProcessor` にバッチ処理を導入し、スコアリング処理を高速化
+  - 20件を1回のLLM呼び出しでまとめてスコアリング（約8倍の速度向上）
+  - デフォルトプロバイダーをOpenAIに変更（`defaults.weekly_digest.provider`, `defaults.arxiv_weekly.provider`）
+  - バッチ処理失敗時は自動的に個別処理にフォールバック
+  - 新規設定項目: `defaults.weekly_digest.batch_size`, `defaults.arxiv_weekly.batch_size`
+  - 500件以上の記事を40分以上 → 数分で処理可能に
+
 - **ArXiv週次ダイジェスト機能**: Notion DBから過去1週間分のArXiv論文を取得し、AIが重要度を判定して上位論文を選出。週のトレンド総括と各論文のハイライトをSlackに出力する
   - 新規コンポーネント:
     - `minitools/researchers/trend.py` - TrendResearcher（Tavily APIでトレンド調査）
@@ -16,7 +28,7 @@
   - 新規環境変数: `TAVILY_API_KEY`, `NOTION_ARXIV_DATABASE_ID`, `SLACK_ARXIV_WEEKLY_WEBHOOK_URL`
   - 設定項目: `defaults.arxiv_weekly.days_back`, `defaults.arxiv_weekly.top_papers`
 
-- **ドキュメント自動生成**: `docs/generated/` に以下のドキュメントを追加
+- **ドキュメント自動生成**: `docs/core/` に以下のドキュメントを追加
   - `architecture.md` - システムアーキテクチャ設計書
   - `repo-structure.md` - リポジトリ構造定義書
   - `api-reference.md` - APIリファレンス
@@ -24,7 +36,7 @@
   - `dev-guidelines.md` - 開発ガイドライン
   - `CHANGELOG.md` - 変更履歴
 
-- **週次AIダイジェスト機能**: Google AlertsのNotion DBから過去1週間分の記事を取得し、AIが重要度を判定して上位20件を選出。週のトレンド総括と各記事の要約をSlackに出力する
+- **Google Alerts週次AIダイジェスト機能**: Google AlertsのNotion DBから過去1週間分の記事を取得し、AIが重要度を判定して上位20件を選出。週のトレンド総括と各記事の要約をSlackに出力する
   - 新規コンポーネント:
     - `minitools/llm/` - LLM抽象化レイヤー（Ollama/OpenAI切り替え、LangChain統合）
     - `minitools/llm/embeddings.py` - Embedding抽象化レイヤー（類似記事検出用）
@@ -33,8 +45,8 @@
     - `minitools/readers/notion.py` - NotionReader（日付フィルタでデータ取得）
     - `minitools/processors/weekly_digest.py` - 週次ダイジェスト処理
     - `minitools/processors/duplicate_detector.py` - 類似記事検出・重複除去
-    - `scripts/weekly_digest.py` - CLIスクリプト
-  - 新規CLIコマンド: `weekly-digest`
+    - `scripts/google_alert_weekly_digest.py` - CLIスクリプト
+  - 新規CLIコマンド: `google-alert-weekly-digest`
   - 新規設定項目: `llm.provider`, `llm.ollama.default_model`, `llm.openai.default_model`
   - 新規環境変数: `NOTION_GOOGLE_ALERTS_DATABASE_ID`, `SLACK_WEEKLY_DIGEST_WEBHOOK_URL`
 
@@ -42,12 +54,12 @@
 - ruff による静的解析チェックを追加 (bf4f777)
 
 ### Removed
-- **レガシードキュメントの削除**: 以下のドキュメントを削除し、`docs/generated/` に統合
-  - `docs/arxiv_async_usage.md` → `docs/generated/architecture.md` に統合
+- **レガシードキュメントの削除**: 以下のドキュメントを削除し、`docs/core/` に統合
+  - `docs/arxiv_async_usage.md` → `docs/core/architecture.md` に統合
   - `docs/docker-gmail-auth.md` → README.md に統合
-  - `docs/gmail_alerts_parallel_processing.md` → `docs/generated/architecture.md` に統合
-  - `docs/medium_daily_digest_async_usage.md` → `docs/generated/architecture.md` に統合
-  - `docs/medium_daily_digest_error_fixes.md` → `docs/generated/dev-guidelines.md` に統合
+  - `docs/gmail_alerts_parallel_processing.md` → `docs/core/architecture.md` に統合
+  - `docs/medium_daily_digest_async_usage.md` → `docs/core/architecture.md` に統合
+  - `docs/medium_daily_digest_error_fixes.md` → `docs/core/dev-guidelines.md` に統合
   - `GPU_SETUP.md` → 削除（未使用）
 
 ## [0.1.0] - 2024

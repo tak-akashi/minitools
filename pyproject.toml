@@ -44,7 +44,7 @@ arxiv = "scripts.arxiv:main"
 medium = "scripts.medium:main"
 google-alerts = "scripts.google_alerts:main"
 youtube = "scripts.youtube:main"
-weekly-digest = "scripts.weekly_digest:main"
+google-alert-weekly-digest = "scripts.google_alert_weekly_digest:main"
 arxiv-weekly = "scripts.arxiv_weekly:main"
 
 [build-system]

@@ -102,6 +102,7 @@ def setup_logger(
     console_handler.setLevel(console_level or level)
     
     # フォーマッターを使用（カラーは必要に応じて）
+    console_formatter: logging.Formatter
     if use_colors:
         console_formatter = ColoredFormatter(
             fmt=format_string,

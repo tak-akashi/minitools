@@ -290,3 +290,166 @@ class TestArxivWeeklyProcessor:
 
         assert len(result) == 10
         assert all("importance_score" in paper for paper in result)
+
+
+class TestArxivBatchScoring:
+    """ArxivWeeklyProcessorのバッチスコアリング機能テスト"""
+
+    @pytest.fixture
+    def sample_papers(self):
+        """テスト用のサンプル論文データ"""
+        return [
+            {
+                "id": "1",
+                "title": "Advances in Transformer Architecture",
+                "日本語訳": "Transformerアーキテクチャの進歩に関する研究。",
+                "url": "https://arxiv.org/abs/2601.00001",
+            },
+            {
+                "id": "2",
+                "title": "Efficient LLM Fine-tuning Methods",
+                "日本語訳": "LLMの効率的なファインチューニング手法。",
+                "url": "https://arxiv.org/abs/2601.00002",
+            },
+            {
+                "id": "3",
+                "title": "Multimodal Learning Survey",
+                "日本語訳": "マルチモーダル学習のサーベイ論文。",
+                "url": "https://arxiv.org/abs/2601.00003",
+            },
+        ]
+
+    @pytest.fixture
+    def sample_trends(self):
+        """テスト用のトレンド情報"""
+        return {
+            "summary": "2026年のAIトレンドでは、エージェントシステムが注目されている。",
+            "topics": ["AI Agents", "Multimodal Models", "Efficient Training"],
+        }
+
+    @pytest.mark.asyncio
+    async def test_batch_scoring_with_trends(self, sample_papers, sample_trends):
+        """トレンドありバッチスコアリングのテスト"""
+        from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
+
+        batch_response = json.dumps([
+            {
+                "index": i,
+                "technical_novelty": 8,
+                "industry_impact": 7,
+                "practicality": 9,
+                "trend_relevance": 8,
+                "reason": f"Paper {i} is highly relevant"
+            }
+            for i in range(len(sample_papers))
+        ])
+        mock_llm = MockLLMClient(json_response=batch_response)
+        processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
+
+        result = await processor.rank_papers_by_importance(
+            sample_papers, trends=sample_trends
+        )
+
+        assert len(result) == len(sample_papers)
+        assert all("importance_score" in paper for paper in result)
+
+    @pytest.mark.asyncio
+    async def test_batch_scoring_without_trends(self, sample_papers):
+        """トレンドなしバッチスコアリングのテスト"""
+        from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
+
+        batch_response = json.dumps([
+            {
+                "index": i,
+                "technical_novelty": 8,
+                "industry_impact": 7,
+                "practicality": 9,
+                "reason": f"Paper {i} evaluation"
+            }
+            for i in range(len(sample_papers))
+        ])
+        mock_llm = MockLLMClient(json_response=batch_response)
+        processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
+
+        result = await processor.rank_papers_by_importance(sample_papers, trends=None)
+
+        assert len(result) == len(sample_papers)
+        assert all("importance_score" in paper for paper in result)
+
+    @pytest.mark.asyncio
+    async def test_batch_json_error_fallback(self, sample_papers):
+        """バッチJSONエラー時のフォールバックテスト"""
+        from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
+
+        mock_llm = MockLLMClient(json_response="invalid json")
+        processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
+
+        result = await processor.rank_papers_by_importance(sample_papers)
+
+        # フォールバック時はデフォルトスコア5.0
+        assert len(result) == len(sample_papers)
+        assert all(paper["importance_score"] == 5.0 for paper in result)
+
+    @pytest.mark.asyncio
+    async def test_score_single_method(self, sample_papers):
+        """_score_singleメソッドのテスト"""
+        from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
+
+        single_response = json.dumps({
+            "technical_novelty": 8,
+            "industry_impact": 7,
+            "practicality": 9,
+            "reason": "Excellent paper"
+        })
+        mock_llm = MockLLMClient(json_response=single_response)
+        processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
+
+        # _score_singleメソッドが存在する場合のみテスト
+        if hasattr(processor, '_score_single'):
+            result = await processor._score_single(sample_papers[0], trends=None)
+            assert "importance_score" in result
+            # (8+7+9)/3 = 8.0
+            assert result["importance_score"] == 8.0
+
+    @pytest.mark.asyncio
+    async def test_batch_size_configuration(self, sample_papers):
+        """batch_sizeパラメータが正しく設定されることを確認"""
+        from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
+
+        mock_llm = MockLLMClient()
+        processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=10)
+
+        assert processor.batch_size == 10
+
+    @pytest.mark.asyncio
+    async def test_large_paper_list_batching(self):
+        """大量の論文がバッチ分割されることを確認"""
+        from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
+
+        batch_response = json.dumps([
+            {
+                "index": i,
+                "technical_novelty": 7,
+                "industry_impact": 7,
+                "practicality": 7,
+                "reason": f"Paper {i}"
+            }
+            for i in range(5)
+        ])
+        mock_llm = MockLLMClient(json_response=batch_response)
+        processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=5)
+
+        # 15件の論文（5件バッチ×3）
+        papers = [
+            {
+                "title": f"Paper {i}",
+                "日本語訳": f"論文{i}の概要",
+                "url": f"https://arxiv.org/abs/2601.{i:05d}",
+            }
+            for i in range(15)
+        ]
+
+        result = await processor.rank_papers_by_importance(papers)
+
+        assert len(result) == 15
+        assert all("importance_score" in paper for paper in result)

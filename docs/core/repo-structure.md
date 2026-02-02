@@ -49,7 +49,7 @@ minitools/
 │   ├── medium.py                  # medium コマンド
 │   ├── google_alerts.py           # google-alerts コマンド
 │   ├── youtube.py                 # youtube コマンド
-│   ├── weekly_digest.py           # weekly-digest コマンド
+│   ├── google_alert_weekly_digest.py  # google-alert-weekly-digest コマンド
 │   └── arxiv_weekly.py            # arxiv-weekly コマンド
 │
 ├── docs/                           # ドキュメント
@@ -163,7 +163,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 | `medium.py` | `medium` | Medium記事の収集・翻訳・保存 |
 | `google_alerts.py` | `google-alerts` | Google Alertsの収集・翻訳・保存 |
 | `youtube.py` | `youtube` | YouTube動画の文字起こし・要約 |
-| `weekly_digest.py` | `weekly-digest` | 週次ダイジェストの生成・Slack通知 |
+| `google_alert_weekly_digest.py` | `google-alert-weekly-digest` | Google Alerts週次ダイジェストの生成・Slack通知 |
 | `arxiv_weekly.py` | `arxiv-weekly` | ArXiv週次ダイジェストの生成・Slack通知 |
 
 ## 新規コンポーネント追加手順
@@ -316,7 +316,8 @@ arxiv = "scripts.arxiv:main"
 medium = "scripts.medium:main"
 google-alerts = "scripts.google_alerts:main"
 youtube = "scripts.youtube:main"
-weekly-digest = "scripts.weekly_digest:main"
+google-alert-weekly-digest = "scripts.google_alert_weekly_digest:main"
+arxiv-weekly = "scripts.arxiv_weekly:main"
 # 新規追加
 new-source = "scripts.new_source:main"
 ```

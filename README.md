@@ -45,7 +45,7 @@ minitools/
 │       └── logger.py      # カラー対応ロギング
 ├── scripts/               # 実行可能スクリプト
 ├── docs/                  # ドキュメント
-│   └── generated/         # 生成ドキュメント
+│   └── core/              # コアドキュメント
 └── outputs/               # 出力ファイル
 ```
 
@@ -143,7 +143,7 @@ docker-compose run minitools medium --date 2024-01-15
 docker-compose run minitools google-alerts --hours 12
 
 # 週次ダイジェスト
-docker-compose run minitools weekly-digest --days 7 --top 20
+docker-compose run minitools google-alert-weekly-digest --days 7 --top 20
 
 # YouTube動画の要約（whisper機能付きビルドが必要）
 BUILD_TARGET=development docker-compose build
@@ -347,15 +347,15 @@ uv run google-alerts --date 2024-01-15
 #### Google Alerts週次ダイジェスト
 ```bash
 # 過去7日間の上位20記事をSlackに送信
-weekly-digest
+google-alert-weekly-digest
 # または
-uv run weekly-digest --days 7 --top 20
+uv run google-alert-weekly-digest --days 7 --top 20
 
 # プレビュー（Slackに送信しない）
-uv run weekly-digest --dry-run
+uv run google-alert-weekly-digest --dry-run
 
 # 重複除去を無効化
-uv run weekly-digest --no-deduplicate
+uv run google-alert-weekly-digest --no-deduplicate
 ```
 
 #### ArXiv週次ダイジェスト
@@ -464,7 +464,7 @@ arXivから指定キーワードで論文を検索し、要約を日本語に翻
 - 手動で`--days`指定時はユーザー指定を優先
 - 火〜金曜日は従来通り1日検索で効率性を保持
 
-詳細: [docs/generated/architecture.md](docs/generated/architecture.md)
+詳細: [docs/core/architecture.md](docs/core/architecture.md)
 
 ### Medium Daily Digest
 
@@ -482,7 +482,7 @@ Gmail経由で受信したMedium Daily Digestメールから記事を抽出し�
 - `--notion`: Notion保存のみ
 - `--slack`: Slack送信のみ
 
-詳細: [docs/generated/architecture.md](docs/generated/architecture.md)
+詳細: [docs/core/architecture.md](docs/core/architecture.md)
 
 ### Google Alerts
 
@@ -514,20 +514,22 @@ NotionのGoogle Alertsデータベースから過去1週間の記事を取得し
 
 **特徴**:
 - LLMによる重要度スコアリング（技術的影響、業界への影響等を評価）
+- **バッチスコアリング**: 20件を1回のLLM呼び出しで処理し、500件を5分以内で処理可能
 - Embeddingベースの類似記事検出・重複除去
 - 週のトレンド総括を自動生成
-- Ollama/OpenAI両対応（LLM抽象化レイヤー）
+- **デフォルトでOpenAI API使用**（高速バッチ処理のため）
 
 **オプション**:
 - `--days`: 集計対象の日数（デフォルト: 7）
 - `--top`: 上位記事数（デフォルト: 20）
 - `--dry-run`: プレビューモード（Slackに送信しない）
 - `--no-deduplicate`: 重複除去を無効化
+- `--provider`: LLMプロバイダーの選択（デフォルト: openai）
 
 **定期実行の設定例（cron）**:
 ```bash
 # 毎週月曜日9時に実行
-0 9 * * 1 cd /path/to/minitools && /path/to/uv run weekly-digest
+0 9 * * 1 cd /path/to/minitools && /path/to/uv run google-alert-weekly-digest
 ```
 
 ### ArXiv週次ダイジェスト
@@ -537,15 +539,16 @@ NotionのArXivデータベースから過去1週間の論文を取得し、AIが
 **特徴**:
 - Tavilyを使用した最新AIトレンドの調査
 - トレンドに基づく論文の重要度スコアリング
+- **バッチスコアリング**: 20件を1回のLLM呼び出しで処理し、高速化
 - LLMによる多角的評価（技術的影響、実用性、革新性等）
-- Ollama/OpenAI両対応
+- **デフォルトでOpenAI API使用**（高速バッチ処理のため）
 
 **オプション**:
 - `--days`: 集計対象の日数（デフォルト: 7）
 - `--top`: 上位論文数（デフォルト: 10）
 - `--dry-run`: プレビューモード（Slackに送信しない）
 - `--no-trends`: Tavilyトレンド調査をスキップ
-- `--provider`: LLMプロバイダーの選択（ollama/openai）
+- `--provider`: LLMプロバイダーの選択（デフォルト: openai）
 
 **定期実行の設定例（cron）**:
 ```bash

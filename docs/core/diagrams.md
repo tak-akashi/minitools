@@ -231,12 +231,12 @@ sequenceDiagram
     CLI-->>User: 結果表示
 ```
 
-### Weekly Digest 処理フロー
+### Google Alert Weekly Digest 処理フロー
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant CLI as scripts/weekly_digest.py
+    participant CLI as scripts/google_alert_weekly_digest.py
     participant NR as NotionReader
     participant Notion as Notion DB
     participant WDP as WeeklyDigestProcessor
@@ -246,7 +246,7 @@ sequenceDiagram
     participant SP as SlackPublisher
     participant Slack
 
-    User->>CLI: weekly-digest --days 7 --top 20
+    User->>CLI: google-alert-weekly-digest --days 7 --top 20
 
     CLI->>NR: get_articles_by_date_range(db_id, start, end)
     NR->>Notion: databases.query(filter)
@@ -255,10 +255,19 @@ sequenceDiagram
 
     CLI->>WDP: process(articles, top_n=20, deduplicate=True)
 
-    Note over WDP: 1. 重要度スコアリング
-    loop 各記事（並列、max=3）
-        WDP->>LLM: chat_json(importance_prompt)
-        LLM-->>WDP: {technical_impact, industry_impact, ...}
+    Note over WDP: 1. 重要度スコアリング（バッチ処理）
+    WDP->>WDP: バッチ分割（20件ずつ）
+    loop 各バッチ（並列、max=3）
+        WDP->>LLM: chat_json(batch_importance_prompt)
+        alt バッチ処理成功
+            LLM-->>WDP: {results: [{index, technical_impact, ...}, ...]}
+        else バッチ処理失敗
+            Note over WDP: 個別処理にフォールバック
+            loop 各記事
+                WDP->>LLM: chat_json(importance_prompt)
+                LLM-->>WDP: {technical_impact, industry_impact, ...}
+            end
+        end
     end
 
     Note over WDP: 2. 重複除去
@@ -329,10 +338,19 @@ sequenceDiagram
     AWP->>LLM: generate(translate_prompt)
     LLM-->>AWP: japanese_trend_summary
 
-    Note over AWP: 3. 重要度スコアリング
-    loop 各論文（並列、max=3）
-        AWP->>LLM: chat_json(importance_prompt with trends)
-        LLM-->>AWP: {technical_novelty, industry_impact, practicality, trend_relevance}
+    Note over AWP: 3. 重要度スコアリング（バッチ処理）
+    AWP->>AWP: バッチ分割（20件ずつ）
+    loop 各バッチ（並列、max=3）
+        AWP->>LLM: chat_json(batch_importance_prompt with trends)
+        alt バッチ処理成功
+            LLM-->>AWP: {results: [{index, technical_novelty, ...}, ...]}
+        else バッチ処理失敗
+            Note over AWP: 個別処理にフォールバック
+            loop 各論文
+                AWP->>LLM: chat_json(importance_prompt with trends)
+                LLM-->>AWP: {technical_novelty, industry_impact, practicality, trend_relevance}
+            end
+        end
     end
 
     Note over AWP: 4. 上位N件を選出
@@ -496,6 +514,7 @@ classDiagram
         +BaseLLMClient llm
         +BaseEmbeddingClient embedding_client
         +int max_concurrent
+        +int batch_size
         +bool dedup_enabled
         +float similarity_threshold
         +float buffer_ratio
@@ -504,6 +523,8 @@ classDiagram
         +generate_trend_summary(articles)
         +generate_article_summaries(articles)
         +process(articles, top_n, deduplicate)
+        -_score_single(article)
+        -_score_batch(articles)
     }
 
     class DuplicateDetector {
@@ -536,12 +557,15 @@ classDiagram
         +BaseLLMClient llm
         +TrendResearcher trend_researcher
         +int max_concurrent
+        +int batch_size
         +rank_papers_by_importance(papers, trends)
         +select_top_papers(papers, top_n)
         +generate_paper_highlights(papers)
         +process(papers, top_n, use_trends)
         -_translate_trend_summary(trend_info)
         -_safe_get_score(value, default)
+        -_score_single(paper, trends)
+        -_score_batch(papers, trends)
     }
 
     DuplicateDetector --> UnionFind : uses
@@ -703,6 +727,55 @@ flowchart TB
     MORE_TASKS -->|No| LOG_RESULT["結果ログ出力"]
 
     LOG_RESULT --> RETURN["stats 返却"]
+```
+
+## バッチスコアリングフロー図
+
+```mermaid
+flowchart TB
+    START["rank_articles_by_importance 開始"] --> SPLIT["記事をバッチに分割<br>(batch_size=20)"]
+
+    SPLIT --> INIT["Semaphore(max_concurrent=3)初期化"]
+
+    INIT --> CREATE_TASKS["全バッチのタスク作成"]
+    CREATE_TASKS --> GATHER["asyncio.gather(*batch_tasks)"]
+
+    GATHER --> BATCH_LOOP{"各バッチ処理"}
+
+    BATCH_LOOP --> ACQUIRE["semaphore.acquire()"]
+    ACQUIRE --> BUILD_PROMPT["バッチ用プロンプト構築<br>(20件の記事情報)"]
+    BUILD_PROMPT --> CALL_LLM["LLM API呼び出し<br>chat_json(batch_prompt)"]
+
+    CALL_LLM --> PARSE{"JSONパース成功?"}
+
+    PARSE -->|Yes| EXTRACT["結果抽出<br>{results: [{index, scores...}]}"]
+    EXTRACT --> MAP_SCORES["インデックスでスコアをマッピング"]
+    MAP_SCORES --> RELEASE1["semaphore.release()"]
+
+    PARSE -->|No| FALLBACK_BATCH["フォールバック処理開始"]
+    FALLBACK_BATCH --> FALLBACK_LOOP{"各記事を個別処理"}
+
+    FALLBACK_LOOP --> SINGLE_PROMPT["単一記事用プロンプト構築"]
+    SINGLE_PROMPT --> SINGLE_LLM["LLM API呼び出し<br>chat_json(single_prompt)"]
+    SINGLE_LLM --> SINGLE_PARSE{"成功?"}
+
+    SINGLE_PARSE -->|Yes| SINGLE_SCORE["スコア付与"]
+    SINGLE_PARSE -->|No| DEFAULT_SCORE["デフォルトスコア(5.0)付与"]
+
+    SINGLE_SCORE --> MORE_ARTICLES{"残記事?"}
+    DEFAULT_SCORE --> MORE_ARTICLES
+
+    MORE_ARTICLES -->|Yes| FALLBACK_LOOP
+    MORE_ARTICLES -->|No| RELEASE2["semaphore.release()"]
+
+    RELEASE1 --> MORE_BATCHES{"残バッチ?"}
+    RELEASE2 --> MORE_BATCHES
+
+    MORE_BATCHES -->|Yes| BATCH_LOOP
+    MORE_BATCHES -->|No| FLATTEN["バッチ結果を平坦化"]
+
+    FLATTEN --> LOG["ログ出力<br>Completed scoring {n} articles"]
+    LOG --> RETURN["scored_articles返却"]
 ```
 
 ## URL正規化フロー図

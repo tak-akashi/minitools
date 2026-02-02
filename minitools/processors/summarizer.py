@@ -62,7 +62,8 @@ class Summarizer:
                 )
             )
             
-            summary = response.message.content.strip()
+            content = response.message.content or ""
+            summary = content.strip()
             logger.debug(f"Generated summary: {summary[:100]}...")
             return summary
             
@@ -104,7 +105,8 @@ class Summarizer:
             
             # レスポンスを行ごとに分割してリスト化
             points = []
-            for line in response.message.content.strip().split('\n'):
+            content = response.message.content or ""
+            for line in content.strip().split('\n'):
                 line = line.strip()
                 if line and (line.startswith('・') or line.startswith('-') or line.startswith('*') or line[0].isdigit()):
                     # 箇条書き記号を削除

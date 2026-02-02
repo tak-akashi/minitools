@@ -202,11 +202,16 @@ Examples:
         help="上位何件の論文を選出するか（デフォルト: 10）",
     )
 
+    # プロバイダーのデフォルト値: arxiv_weekly.provider → llm.provider の順でフォールバック
+    default_provider = config.get(
+        "defaults.arxiv_weekly.provider",
+        config.get("llm.provider", "ollama")
+    )
     parser.add_argument(
         "--provider",
         choices=["ollama", "openai"],
-        default=config.get("llm.provider", "ollama"),
-        help="LLMプロバイダー（デフォルト: 設定ファイルの値）",
+        default=default_provider,
+        help=f"LLMプロバイダー（デフォルト: {default_provider}）",
     )
 
     parser.add_argument(
