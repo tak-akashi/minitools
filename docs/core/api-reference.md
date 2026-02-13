@@ -1578,16 +1578,16 @@ class NotionPublisher:
         self,
         database_id: str,
         url: str
-    ) -> Optional[str]:
+    ) -> Optional[PageInfo]:
         """
-        URLでNotionデータベースを検索し、既存ページのIDを取得
+        URLでNotionデータベースを検索し、既存ページの情報を取得
 
         Args:
             database_id: NotionデータベースID
             url: 検索するURL
 
         Returns:
-            ページID（見つからない場合はNone）
+            PageInfo(page_id, is_translated)（見つからない場合はNone）
         """
 
     async def append_blocks(
@@ -1632,14 +1632,17 @@ result = await publisher.batch_save_articles(
 print(f"成功: {result['stats']['success']}")
 
 # 既存ページにブロック追記（全文翻訳機能）
-page_id = await publisher.find_page_by_url(database_id="xxx", url="https://medium.com/...")
-if page_id:
-    blocks = NotionBlockBuilder().build_blocks(translated_markdown)
-    success = await publisher.append_blocks(page_id, blocks)
-    if success:
-        await publisher.update_page_properties(page_id, {
-            "Translated": {"checkbox": True}
-        })
+page_info = await publisher.find_page_by_url(database_id="xxx", url="https://medium.com/...")
+if page_info:
+    if page_info.is_translated:
+        print("Already translated, skipping")
+    else:
+        blocks = NotionBlockBuilder().build_blocks(translated_markdown)
+        success = await publisher.append_blocks(page_info.page_id, blocks)
+        if success:
+            await publisher.update_page_properties(page_info.page_id, {
+                "Translated": {"checkbox": True}
+            })
 ```
 
 ---

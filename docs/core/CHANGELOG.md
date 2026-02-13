@@ -8,6 +8,12 @@
 - **週次ダイジェストスクリプトのリネーム**: `scripts/weekly_digest.py` → `scripts/google_alert_weekly_digest.py`
   - CLIコマンド: `weekly-digest` → `google-alert-weekly-digest`
   - 目的: Google Alerts専用であることを明確化
+- **`find_page_by_url()` の返り値変更**: `Optional[str]` → `Optional[PageInfo]`
+  - `PageInfo` NamedTuple（`page_id: str`, `is_translated: bool`）を返すように変更
+  - 既存のNotionクエリ結果から `Translated` チェックボックスの状態を取得（追加APIコール不要）
+- **全文翻訳の重複防止**: 翻訳済み記事のスキップ機能を追加
+  - `scripts/medium.py --translate`: Notionページ検索をスクレイピング前に移動し、`Translated`チェック済みの場合は翻訳処理全体をスキップ
+  - `scripts/medium_translate.py`: 同様に`Translated`チェック済みの場合はNotionへの追記をスキップ
 
 ### Added
 - **Medium Claps数の出力**: NotionデータベースとSlack通知にClaps（拍手数）を追加

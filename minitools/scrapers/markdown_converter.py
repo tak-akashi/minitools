@@ -128,9 +128,12 @@ class MarkdownConverter:
         """コードブロック要素をMarkdownに変換"""
         code_tag = element.find("code")
         if code_tag and isinstance(code_tag, Tag):
+            # <br>タグを改行文字に置換してからテキスト抽出
+            self._replace_br_with_newline(code_tag)
             code_text = code_tag.get_text()
             language = self._detect_language(code_tag)
         else:
+            self._replace_br_with_newline(element)
             code_text = element.get_text()
             language = ""
 
@@ -138,6 +141,11 @@ class MarkdownConverter:
         code_text = code_text.rstrip("\n")
 
         return f"```{language}\n{code_text}\n```"
+
+    def _replace_br_with_newline(self, element: Tag) -> None:
+        """要素内の<br>タグを改行文字に置換する"""
+        for br in element.find_all("br"):
+            br.replace_with("\n")
 
     def _detect_language(self, code_tag: Tag) -> str:
         """コードブロックのプログラミング言語を検出"""

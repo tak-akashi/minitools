@@ -55,6 +55,20 @@ class TestMarkdownConverterCodeBlocks:
         result = converter.convert(html)
         assert "```javascript" in result
 
+    def test_code_block_with_br_tags(self, converter):
+        """<br>タグを含むコードブロックで改行が保持される"""
+        html = '<pre><code class="language-python">import instructor<br>from pydantic import BaseModel<br>from openai import OpenAI</code></pre>'
+        result = converter.convert(html)
+        assert "```python" in result
+        assert "import instructor\nfrom pydantic" in result
+        assert "BaseModel\nfrom openai" in result
+
+    def test_code_block_with_br_tags_no_code_tag(self, converter):
+        """<code>タグなしの<pre>要素で<br>タグが改行に変換される"""
+        html = "<pre>line one<br>line two<br>line three</pre>"
+        result = converter.convert(html)
+        assert "line one\nline two\nline three" in result
+
 
 class TestMarkdownConverterImages:
     """画像変換のテスト"""

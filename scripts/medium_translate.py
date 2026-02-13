@@ -98,9 +98,13 @@ async def process_article(
             logger.error("NotionPublisher or database_id not configured")
             return "failed"
 
-        page_id = await publisher.find_page_by_url(database_id, url)
-        if not page_id:
+        page_info = await publisher.find_page_by_url(database_id, url)
+        if not page_info:
             logger.warning(f"Page not found for URL: {url}")
+            return "skipped"
+
+        if page_info.is_translated:
+            logger.info(f"Already translated, skipping: {url}")
             return "skipped"
 
         # 6. Markdown→Notionブロック変換
@@ -108,15 +112,15 @@ async def process_article(
         logger.info(f"Built {len(blocks)} Notion blocks")
 
         # 7. Notionページに追記
-        success = await publisher.append_blocks(page_id, blocks)
+        success = await publisher.append_blocks(page_info.page_id, blocks)
         if success:
             await publisher.update_page_properties(
-                page_id, {"Translated": {"checkbox": True}}
+                page_info.page_id, {"Translated": {"checkbox": True}}
             )
-            logger.info(f"Translation appended to Notion page: {page_id}")
+            logger.info(f"Translation appended to Notion page: {page_info.page_id}")
             return "success"
         else:
-            logger.error(f"Failed to append blocks to page: {page_id}")
+            logger.error(f"Failed to append blocks to page: {page_info.page_id}")
             return "failed"
 
     except Exception as e:

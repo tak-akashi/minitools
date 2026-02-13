@@ -168,17 +168,21 @@ sequenceDiagram
         alt not dry-run
             CLI->>NP: find_page_by_url(database_id, url)
             NP->>Notion: databases.query(filter=url)
-            Notion-->>NP: page_id
-            NP-->>CLI: page_id
+            Notion-->>NP: page + properties
+            NP-->>CLI: PageInfo(page_id, is_translated)
 
-            CLI->>NBB: build_blocks(translated_markdown)
-            NBB-->>CLI: blocks[]
+            alt is_translated == true
+                Note over CLI: 翻訳済みのためスキップ
+            else is_translated == false
+                CLI->>NBB: build_blocks(translated_markdown)
+                NBB-->>CLI: blocks[]
 
-            CLI->>NP: append_blocks(page_id, blocks)
-            Note over NP: 100ブロック単位でバッチ追記
-            NP->>Notion: blocks.children.append()
-            Notion-->>NP: OK
-            NP-->>CLI: success
+                CLI->>NP: append_blocks(page_id, blocks)
+                Note over NP: 100ブロック単位でバッチ追記
+                NP->>Notion: blocks.children.append()
+                Notion-->>NP: OK
+                NP-->>CLI: success
+            end
         end
     end
 
@@ -503,6 +507,12 @@ classDiagram
         +extract_key_points(text, num_points)
     }
 
+    class PageInfo {
+        <<NamedTuple>>
+        +str page_id
+        +bool is_translated
+    }
+
     class NotionPublisher {
         +str api_key
         +str source_type
@@ -511,7 +521,7 @@ classDiagram
         +create_page(database_id, properties)
         +save_article(database_id, article_data)
         +batch_save_articles(database_id, articles, max_concurrent)
-        +find_page_by_url(database_id, url)
+        +find_page_by_url(database_id, url) Optional~PageInfo~
         +append_blocks(page_id, blocks)
         +update_page_properties(page_id, properties)
         -_normalize_url_by_source(url)
@@ -520,6 +530,8 @@ classDiagram
         -_build_medium_properties(article_data)
         -_build_google_alerts_properties(article_data)
     }
+
+    NotionPublisher ..> PageInfo : returns
 
     class SlackPublisher {
         +str webhook_url

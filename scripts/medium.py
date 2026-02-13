@@ -294,6 +294,19 @@ async def main_async():
                     for article in translate_targets:
                         url = article.get("url", "")
                         try:
+                            page_info = await notion_pub.find_page_by_url(
+                                database_id, url
+                            )
+                            if not page_info:
+                                logger.warning(f"Page not found for URL: {url}")
+                                translate_stats["skipped"] += 1
+                                continue
+
+                            if page_info.is_translated:
+                                logger.info(f"Already translated, skipping: {url}")
+                                translate_stats["skipped"] += 1
+                                continue
+
                             html = await scraper.scrape_article(url)
                             if not html:
                                 translate_stats["failed"] += 1
@@ -302,20 +315,15 @@ async def main_async():
                             md = converter.convert(html)
                             translated = await ft_translator.translate(md)
 
-                            page_id = await notion_pub.find_page_by_url(
-                                database_id, url
-                            )
-                            if not page_id:
-                                logger.warning(f"Page not found for URL: {url}")
-                                translate_stats["skipped"] += 1
-                                continue
-
                             blocks = block_builder.build_blocks(translated)
-                            success = await notion_pub.append_blocks(page_id, blocks)
+                            success = await notion_pub.append_blocks(
+                                page_info.page_id, blocks
+                            )
 
                             if success:
                                 await notion_pub.update_page_properties(
-                                    page_id, {"Translated": {"checkbox": True}}
+                                    page_info.page_id,
+                                    {"Translated": {"checkbox": True}},
                                 )
                                 translate_stats["success"] += 1
                             else:
