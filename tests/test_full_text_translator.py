@@ -106,9 +106,7 @@ class TestFullTextTranslatorTranslation:
     async def test_multi_chunk_translation(self):
         """複数チャンクの翻訳が結合される"""
         mock_llm = MockLLMClient(chat_response="翻訳チャンク")
-        translator = FullTextTranslator(
-            llm_client=mock_llm, chunk_size=50
-        )
+        translator = FullTextTranslator(llm_client=mock_llm, chunk_size=50)
 
         md = "# Section 1\n\nLong text here.\n\n# Section 2\n\nMore text here."
         result = await translator.translate(md)

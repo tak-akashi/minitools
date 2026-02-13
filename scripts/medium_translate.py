@@ -110,9 +110,9 @@ async def process_article(
         # 7. Notionページに追記
         success = await publisher.append_blocks(page_id, blocks)
         if success:
-            await publisher.update_page_properties(page_id, {
-                "Translated": {"checkbox": True}
-            })
+            await publisher.update_page_properties(
+                page_id, {"Translated": {"checkbox": True}}
+            )
             logger.info(f"Translation appended to Notion page: {page_id}")
             return "success"
         else:
@@ -227,8 +227,10 @@ Examples:
 
     # ロガー初期化
     default_log_level = config.get("logging.level", "INFO").upper()
-    log_level = logging.DEBUG if args.debug else getattr(
-        logging, default_log_level, logging.INFO
+    log_level = (
+        logging.DEBUG
+        if args.debug
+        else getattr(logging, default_log_level, logging.INFO)
     )
 
     global logger

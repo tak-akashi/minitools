@@ -22,7 +22,9 @@ from minitools.readers.notion import NotionReader
 from minitools.utils.config import get_config
 from minitools.utils.logger import setup_logger
 
-logger = setup_logger(name="scripts.google_alert_weekly_digest", log_file="google_alert_weekly_digest.log")
+logger = setup_logger(
+    name="scripts.google_alert_weekly_digest", log_file="google_alert_weekly_digest.log"
+)
 
 
 async def generate_digest(
@@ -56,7 +58,9 @@ async def generate_digest(
     embed_provider = embedding_provider or provider
 
     logger.info(f"Generating weekly digest for {start_date_str} to {end_date_str}")
-    logger.info(f"LLM Provider: {provider}, Embedding Provider: {embed_provider}, Top articles: {top_n}")
+    logger.info(
+        f"LLM Provider: {provider}, Embedding Provider: {embed_provider}, Top articles: {top_n}"
+    )
 
     # Notion DBからGoogle Alertsの記事を取得
     database_id = os.getenv("NOTION_GOOGLE_ALERTS_DATABASE_ID")
@@ -80,7 +84,9 @@ async def generate_digest(
 
     if not articles:
         logger.warning("No articles found in the specified date range")
-        print(f"期間 {start_date_str} - {end_date_str} に該当する記事がありませんでした。")
+        print(
+            f"期間 {start_date_str} - {end_date_str} に該当する記事がありませんでした。"
+        )
         return
 
     logger.info(f"Found {len(articles)} articles")
@@ -148,7 +154,9 @@ async def generate_digest(
     # Slackに送信
     webhook_url = os.getenv("SLACK_WEEKLY_DIGEST_WEBHOOK_URL")
     if not webhook_url:
-        logger.warning("SLACK_WEEKLY_DIGEST_WEBHOOK_URL is not set. Skipping Slack notification.")
+        logger.warning(
+            "SLACK_WEEKLY_DIGEST_WEBHOOK_URL is not set. Skipping Slack notification."
+        )
         print("Slack Webhook URLが設定されていないため、通知をスキップしました。")
         return
 
@@ -198,8 +206,7 @@ Examples:
 
     # プロバイダーのデフォルト値: weekly_digest.provider → llm.provider の順でフォールバック
     default_provider = config.get(
-        "defaults.weekly_digest.provider",
-        config.get("llm.provider", "ollama")
+        "defaults.weekly_digest.provider", config.get("llm.provider", "ollama")
     )
     parser.add_argument(
         "--provider",

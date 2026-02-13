@@ -30,9 +30,7 @@ class TestTrendResearcher:
         }
 
         with patch.dict("os.environ", {"TAVILY_API_KEY": "test-api-key"}):
-            with patch(
-                "minitools.researchers.trend.TavilyClient"
-            ) as mock_client_class:
+            with patch("minitools.researchers.trend.TavilyClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.search.return_value = mock_response
                 mock_client_class.return_value = mock_client
@@ -68,9 +66,7 @@ class TestTrendResearcher:
         from minitools.researchers.trend import TrendResearcher
 
         with patch.dict("os.environ", {"TAVILY_API_KEY": "test-api-key"}):
-            with patch(
-                "minitools.researchers.trend.TavilyClient"
-            ) as mock_client_class:
+            with patch("minitools.researchers.trend.TavilyClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.search.side_effect = Exception("API connection failed")
                 mock_client_class.return_value = mock_client
@@ -86,14 +82,14 @@ class TestTrendResearcher:
         from minitools.researchers.trend import TrendResearcher
 
         mock_response = {
-            "results": [{"title": "Test", "url": "https://test.com", "content": "Test content"}],
+            "results": [
+                {"title": "Test", "url": "https://test.com", "content": "Test content"}
+            ],
             "answer": "Test answer",
         }
 
         with patch.dict("os.environ", {"TAVILY_API_KEY": "test-api-key"}):
-            with patch(
-                "minitools.researchers.trend.TavilyClient"
-            ) as mock_client_class:
+            with patch("minitools.researchers.trend.TavilyClient") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.search.return_value = mock_response
                 mock_client_class.return_value = mock_client

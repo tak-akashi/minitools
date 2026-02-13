@@ -273,10 +273,10 @@ class TestMediumScraperCDP:
         mock_playwright.chromium = mock_chromium
         cdp_scraper._playwright = mock_playwright
 
-        with patch.object(
-            cdp_scraper, "_is_chrome_running", return_value=True
-        ):
-            with pytest.raises(RuntimeError, match="Failed to connect to Chrome via CDP"):
+        with patch.object(cdp_scraper, "_is_chrome_running", return_value=True):
+            with pytest.raises(
+                RuntimeError, match="Failed to connect to Chrome via CDP"
+            ):
                 await cdp_scraper._connect_cdp()
 
     @pytest.mark.asyncio
@@ -289,8 +289,6 @@ class TestMediumScraperCDP:
             mock_async_client.return_value.__aenter__ = AsyncMock(
                 return_value=mock_client
             )
-            mock_async_client.return_value.__aexit__ = AsyncMock(
-                return_value=False
-            )
+            mock_async_client.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await cdp_scraper._is_chrome_running()
             assert result is False

@@ -83,9 +83,7 @@ class DuplicateDetector:
         """
         self.embedding_client = embedding_client
         self.similarity_threshold = similarity_threshold
-        logger.info(
-            f"DuplicateDetector initialized (threshold={similarity_threshold})"
-        )
+        logger.info(f"DuplicateDetector initialized (threshold={similarity_threshold})")
 
     def _prepare_text(self, article: Dict[str, Any]) -> str:
         """
@@ -205,8 +203,7 @@ class DuplicateDetector:
             )
             for i, group in enumerate(duplicate_groups, 1):
                 titles = [
-                    g.get("title", g.get("original_title", "N/A"))[:40]
-                    for g in group
+                    g.get("title", g.get("original_title", "N/A"))[:40] for g in group
                 ]
                 logger.info(f"  Group {i}: {titles}")
 

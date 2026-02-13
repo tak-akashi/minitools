@@ -204,8 +204,7 @@ Examples:
 
     # プロバイダーのデフォルト値: arxiv_weekly.provider → llm.provider の順でフォールバック
     default_provider = config.get(
-        "defaults.arxiv_weekly.provider",
-        config.get("llm.provider", "ollama")
+        "defaults.arxiv_weekly.provider", config.get("llm.provider", "ollama")
     )
     parser.add_argument(
         "--provider",

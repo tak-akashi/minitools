@@ -64,7 +64,10 @@ class TestAppendBlocks:
         publisher.client.blocks.children.append.return_value = {}
 
         blocks = [
-            {"type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": "test"}}]}}
+            {
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": "test"}}]},
+            }
             for _ in range(5)
         ]
 
@@ -84,7 +87,10 @@ class TestAppendBlocks:
         publisher.client.blocks.children.append.return_value = {}
 
         blocks = [
-            {"type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": f"test {i}"}}]}}
+            {
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": f"test {i}"}}]},
+            }
             for i in range(150)
         ]
 
@@ -99,7 +105,10 @@ class TestAppendBlocks:
         publisher.client.blocks.children.append.side_effect = Exception("API Error")
 
         blocks = [
-            {"type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": "test"}}]}}
+            {
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": "test"}}]},
+            }
         ]
 
         result = await publisher.append_blocks("page-id", blocks)

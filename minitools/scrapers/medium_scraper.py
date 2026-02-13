@@ -45,6 +45,7 @@ def _find_chrome_path() -> Optional[str]:
                 return path
     elif sys.platform == "win32":
         import winreg
+
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_LOCAL_MACHINE,
@@ -230,7 +231,9 @@ class MediumScraper:
 
             # Cloudflareチャレンジの検出
             if await self._is_cloudflare_challenge():
-                logger.warning("Cloudflare challenge detected, waiting for resolution...")
+                logger.warning(
+                    "Cloudflare challenge detected, waiting for resolution..."
+                )
                 for _ in range(24):
                     await asyncio.sleep(5)
                     if not await self._is_cloudflare_challenge():

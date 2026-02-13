@@ -60,9 +60,7 @@ class FullTextTranslator:
             config.get("llm.provider", "ollama"),
         )
         # モデルはプロバイダーのデフォルトに委譲（明示指定時のみ上書き）
-        self.model = model or config.get(
-            f"llm.{self.provider}.default_model", None
-        )
+        self.model = model or config.get(f"llm.{self.provider}.default_model", None)
         self.chunk_size = chunk_size
         self.max_retries = max_retries
 
@@ -96,8 +94,7 @@ class FullTextTranslator:
         translated_chunks: List[str] = []
         for i, chunk in enumerate(chunks):
             logger.info(
-                f"  Translating chunk {i + 1}/{len(chunks)} "
-                f"({len(chunk)} chars)"
+                f"  Translating chunk {i + 1}/{len(chunks)} ({len(chunk)} chars)"
             )
             translated = await self._translate_chunk(chunk)
             translated_chunks.append(translated)
@@ -219,9 +216,7 @@ class FullTextTranslator:
                 translated = result.strip()
                 if translated:
                     return translated
-                logger.warning(
-                    f"Empty translation result (attempt {attempt + 1})"
-                )
+                logger.warning(f"Empty translation result (attempt {attempt + 1})")
             except Exception as e:
                 delay = 2**attempt  # 指数バックオフ: 1, 2, 4秒
                 logger.warning(

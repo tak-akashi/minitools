@@ -9,9 +9,10 @@ from minitools.collectors.google_alerts import GoogleAlertsCollector
 # YouTubeCollectorは条件付きでインポート
 try:
     from minitools.collectors.youtube import YouTubeCollector
+
     __all__ = [
         "ArxivCollector",
-        "MediumCollector", 
+        "MediumCollector",
         "GoogleAlertsCollector",
         "YouTubeCollector",
     ]
@@ -19,6 +20,6 @@ except ImportError:
     # mlx_whisperがインストールされていない場合
     __all__ = [
         "ArxivCollector",
-        "MediumCollector", 
+        "MediumCollector",
         "GoogleAlertsCollector",
     ]

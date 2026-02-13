@@ -287,7 +287,9 @@ class ArxivWeeklyProcessor:
             paper["score_reason"] = result.get("reason", "")
             paper["score_details"] = result
 
-            logger.debug(f"Scored (single) '{title[:40]}...': {paper['importance_score']}")
+            logger.debug(
+                f"Scored (single) '{title[:40]}...': {paper['importance_score']}"
+            )
 
         except (json.JSONDecodeError, LLMError, TypeError, ValueError) as e:
             logger.warning(
@@ -347,9 +349,7 @@ class ArxivWeeklyProcessor:
 
         # LLM呼び出し
         if hasattr(self.llm, "chat_json"):
-            response = await self.llm.chat_json(
-                [{"role": "user", "content": prompt}]
-            )
+            response = await self.llm.chat_json([{"role": "user", "content": prompt}])
         else:
             response = await self.llm.generate(prompt)
 
@@ -362,7 +362,9 @@ class ArxivWeeklyProcessor:
         elif isinstance(parsed, list):
             results = parsed
         else:
-            raise json.JSONDecodeError("Expected JSON object with 'results' key or JSON array", response, 0)
+            raise json.JSONDecodeError(
+                "Expected JSON object with 'results' key or JSON array", response, 0
+            )
 
         if not isinstance(results, list):
             raise json.JSONDecodeError("Expected results to be a list", response, 0)
@@ -395,7 +397,9 @@ class ArxivWeeklyProcessor:
                 paper["score_reason"] = result.get("reason", "")
                 paper["score_details"] = result
 
-                logger.debug(f"Scored (batch) '{title[:40]}...': {paper['importance_score']}")
+                logger.debug(
+                    f"Scored (batch) '{title[:40]}...': {paper['importance_score']}"
+                )
             else:
                 logger.warning(f"Missing score for index {i}, using default")
                 paper["importance_score"] = 5.0
@@ -608,9 +612,7 @@ class ArxivWeeklyProcessor:
 
         try:
             if hasattr(self.llm, "chat"):
-                response = await self.llm.chat(
-                    [{"role": "user", "content": prompt}]
-                )
+                response = await self.llm.chat([{"role": "user", "content": prompt}])
             else:
                 response = await self.llm.generate(prompt)
 

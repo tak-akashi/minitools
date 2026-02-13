@@ -10,7 +10,7 @@ from minitools.collectors.medium import MediumCollector
 @pytest.fixture
 def collector():
     """Gmail認証をモックしたMediumCollectorインスタンス"""
-    with patch.object(MediumCollector, '_authenticate_gmail'):
+    with patch.object(MediumCollector, "_authenticate_gmail"):
         return MediumCollector()
 
 
@@ -53,32 +53,32 @@ class TestExtractClaps:
 
     def test_claps_label_no_space(self, collector):
         """'Claps320' パターン"""
-        html = '<div><span>5 min read</span><span>Claps320</span><span>Responses4</span></div>'
-        container = BeautifulSoup(html, 'html.parser').div
+        html = "<div><span>5 min read</span><span>Claps320</span><span>Responses4</span></div>"
+        container = BeautifulSoup(html, "html.parser").div
         assert collector._extract_claps(container) == 320
 
     def test_claps_label_with_space(self, collector):
         """'Claps 320' パターン"""
-        html = '<div><span>Claps 1.2K</span></div>'
-        container = BeautifulSoup(html, 'html.parser').div
+        html = "<div><span>Claps 1.2K</span></div>"
+        container = BeautifulSoup(html, "html.parser").div
         assert collector._extract_claps(container) == 1200
 
     def test_claps_emoji(self, collector):
         """👏 アイコンの後の数値"""
-        html = '<div><span>👏 500</span></div>'
-        container = BeautifulSoup(html, 'html.parser').div
+        html = "<div><span>👏 500</span></div>"
+        container = BeautifulSoup(html, "html.parser").div
         assert collector._extract_claps(container) == 500
 
     def test_min_read_pattern(self, collector):
         """'X min read' の後の数値"""
-        html = '<div><span>5 min read 320 4</span></div>'
-        container = BeautifulSoup(html, 'html.parser').div
+        html = "<div><span>5 min read 320 4</span></div>"
+        container = BeautifulSoup(html, "html.parser").div
         assert collector._extract_claps(container) == 320
 
     def test_no_claps(self, collector):
         """拍手データがない場合は0"""
-        html = '<div><span>Just some text</span></div>'
-        container = BeautifulSoup(html, 'html.parser').div
+        html = "<div><span>Just some text</span></div>"
+        container = BeautifulSoup(html, "html.parser").div
         assert collector._extract_claps(container) == 0
 
     def test_none_container(self, collector):
@@ -87,7 +87,7 @@ class TestExtractClaps:
 
     def test_claps_in_nested_html(self, collector):
         """ネストされたHTML内のClapsパターン"""
-        html = '''
+        html = """
         <div>
             <a class="ag" href="https://medium.com/test">
                 <h2>Article Title</h2>
@@ -99,8 +99,8 @@ class TestExtractClaps:
                 <span>Responses1</span>
             </div>
         </div>
-        '''
-        container = BeautifulSoup(html, 'html.parser').div
+        """
+        container = BeautifulSoup(html, "html.parser").div
         assert collector._extract_claps(container) == 42
 
 
@@ -109,7 +109,7 @@ class TestParseArticlesWithClaps:
 
     def _build_email_html(self, claps_text="Claps150"):
         """テスト用のMedium Daily Digest風HTMLを生成"""
-        return f'''
+        return f"""
         <html><body>
         <div>
             <div>
@@ -128,7 +128,7 @@ class TestParseArticlesWithClaps:
             </div>
         </div>
         </body></html>
-        '''
+        """
 
     def test_claps_extracted(self, collector):
         """parse_articlesが拍手数を抽出する"""

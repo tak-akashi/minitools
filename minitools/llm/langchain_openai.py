@@ -57,15 +57,12 @@ class LangChainOpenAIClient(BaseLLMClient):
         resolved_api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not resolved_api_key:
             raise ValueError(
-                "OPENAI_API_KEY is required. "
-                "Set it in .env file or pass as argument."
+                "OPENAI_API_KEY is required. Set it in .env file or pass as argument."
             )
         self.api_key: str = resolved_api_key
 
         config = get_config()
-        self.default_model = model or config.get(
-            "llm.openai.default_model", "gpt-4o"
-        )
+        self.default_model = model or config.get("llm.openai.default_model", "gpt-4o")
         self._chat_model: Optional[ChatOpenAI] = None
         logger.debug(
             f"LangChainOpenAIClient initialized with model: {self.default_model}"

@@ -112,7 +112,7 @@ class TestDuplicateDetector:
         """重複がない場合のテスト"""
         detector = DuplicateDetector(
             embedding_client=mock_embedding_client,
-            similarity_threshold=0.95  # 高い閾値
+            similarity_threshold=0.95,  # 高い閾値
         )
         articles = [
             {"title": "Article A", "summary": "Unique content about topic A"},
@@ -220,8 +220,7 @@ class TestDuplicateDetector:
         detector = DuplicateDetector(embedding_client=mock_embedding_client)
 
         groups = [
-            [{"title": f"Article {i}", "importance_score": float(i)}]
-            for i in range(10)
+            [{"title": f"Article {i}", "importance_score": float(i)}] for i in range(10)
         ]
 
         result = detector.select_representatives(groups, top_n=3)
@@ -253,7 +252,11 @@ class TestDeduplicateArticles:
     async def test_deduplicate_articles_basic(self, mock_embedding_client):
         """基本的な重複除去テスト"""
         articles = [
-            {"title": f"Article {i}", "summary": f"Summary {i}", "importance_score": float(10 - i)}
+            {
+                "title": f"Article {i}",
+                "summary": f"Summary {i}",
+                "importance_score": float(10 - i),
+            }
             for i in range(10)
         ]
 
@@ -282,7 +285,11 @@ class TestDeduplicateArticles:
     async def test_deduplicate_articles_buffer_ratio(self, mock_embedding_client):
         """バッファ倍率のテスト"""
         articles = [
-            {"title": f"Article {i}", "summary": f"Summary {i}", "importance_score": float(100 - i)}
+            {
+                "title": f"Article {i}",
+                "summary": f"Summary {i}",
+                "importance_score": float(100 - i),
+            }
             for i in range(100)
         ]
 

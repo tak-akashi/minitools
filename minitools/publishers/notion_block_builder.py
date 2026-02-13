@@ -188,7 +188,9 @@ class NotionBlockBuilder:
             "paragraph": {"rich_text": self._build_rich_text(text)},
         }
 
-    def _build_code_block(self, code: str, language: str = "plain text") -> Dict[str, Any]:
+    def _build_code_block(
+        self, code: str, language: str = "plain text"
+    ) -> Dict[str, Any]:
         """コードブロックを生成"""
         # Notion APIの言語名にマッピング
         language_map = {

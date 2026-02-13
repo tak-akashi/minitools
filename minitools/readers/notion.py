@@ -233,9 +233,7 @@ class NotionReader:
                 "database_id is required or NOTION_ARXIV_DATABASE_ID must be set"
             )
 
-        logger.info(
-            f"Fetching ArXiv papers from {start_date} to {end_date}"
-        )
+        logger.info(f"Fetching ArXiv papers from {start_date} to {end_date}")
 
         # 既存のメソッドを「公開日」プロパティで呼び出し
         papers = await self.get_articles_by_date_range(

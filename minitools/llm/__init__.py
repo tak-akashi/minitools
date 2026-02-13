@@ -139,7 +139,9 @@ def get_llm_client(
         try:
             return _get_openai_client(model=model)
         except ValueError as e:
-            logger.warning(f"OpenAI initialization failed: {e}. Falling back to Ollama.")
+            logger.warning(
+                f"OpenAI initialization failed: {e}. Falling back to Ollama."
+            )
             return _get_ollama_client(model=model)
 
     elif use_provider == "gemini":

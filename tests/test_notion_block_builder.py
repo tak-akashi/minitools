@@ -122,7 +122,10 @@ class TestNotionBlockBuilderLists:
         md = "- Item 1\n- Item 2"
         blocks = builder.build_blocks(md)
         assert blocks[1]["type"] == "bulleted_list_item"
-        assert blocks[1]["bulleted_list_item"]["rich_text"][0]["text"]["content"] == "Item 1"
+        assert (
+            blocks[1]["bulleted_list_item"]["rich_text"][0]["text"]["content"]
+            == "Item 1"
+        )
         assert blocks[2]["type"] == "bulleted_list_item"
 
     def test_numbered_list(self, builder):
@@ -130,7 +133,10 @@ class TestNotionBlockBuilderLists:
         md = "1. First\n2. Second"
         blocks = builder.build_blocks(md)
         assert blocks[1]["type"] == "numbered_list_item"
-        assert blocks[1]["numbered_list_item"]["rich_text"][0]["text"]["content"] == "First"
+        assert (
+            blocks[1]["numbered_list_item"]["rich_text"][0]["text"]["content"]
+            == "First"
+        )
         assert blocks[2]["type"] == "numbered_list_item"
 
 
@@ -192,7 +198,10 @@ class TestNotionBlockBuilderItalicLines:
         blocks = builder.build_blocks("  *Figure 1: Diagram*  ")
         para = blocks[1]
         assert para["type"] == "paragraph"
-        assert "*Figure 1: Diagram*" in para["paragraph"]["rich_text"][0]["text"]["content"]
+        assert (
+            "*Figure 1: Diagram*"
+            in para["paragraph"]["rich_text"][0]["text"]["content"]
+        )
 
 
 class TestNotionBlockBuilderRichText:

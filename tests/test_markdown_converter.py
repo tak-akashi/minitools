@@ -257,7 +257,7 @@ class TestMarkdownConverterRichText:
 
     def test_paragraph_with_link_no_href(self, converter):
         """href属性がないリンクはテキストのみ"""
-        html = '<p>Click <a>here</a> for more</p>'
+        html = "<p>Click <a>here</a> for more</p>"
         result = converter.convert(html)
         assert "here" in result
         assert "[" not in result

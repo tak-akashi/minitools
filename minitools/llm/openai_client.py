@@ -29,21 +29,17 @@ class OpenAIClient(BaseLLMClient):
             from openai import AsyncOpenAI
         except ImportError as e:
             raise LLMError(
-                "openai package is not installed. "
-                "Install it with: uv add openai"
+                "openai package is not installed. Install it with: uv add openai"
             ) from e
 
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "OPENAI_API_KEY is required. "
-                "Set it in .env file or pass as argument."
+                "OPENAI_API_KEY is required. Set it in .env file or pass as argument."
             )
 
         config = get_config()
-        self.default_model = model or config.get(
-            "llm.openai.default_model", "gpt-4o"
-        )
+        self.default_model = model or config.get("llm.openai.default_model", "gpt-4o")
 
         self.client = AsyncOpenAI(api_key=self.api_key)
         logger.debug(f"OpenAIClient initialized with model: {self.default_model}")

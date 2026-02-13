@@ -45,11 +45,12 @@ class LangChainGeminiClient(BaseLLMClient):
         Raises:
             ValueError: APIキーが設定されていない場合
         """
-        resolved_api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        resolved_api_key = (
+            api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        )
         if not resolved_api_key:
             raise ValueError(
-                "GEMINI_API_KEY is required. "
-                "Set it in .env file or pass as argument."
+                "GEMINI_API_KEY is required. Set it in .env file or pass as argument."
             )
         self.api_key: str = resolved_api_key
 
