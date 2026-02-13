@@ -92,6 +92,7 @@ class Article:
     url: str
     author: str
     preview: str = ""
+    claps: int = 0
     japanese_title: str = ""
     summary: str = ""
     japanese_summary: str = ""

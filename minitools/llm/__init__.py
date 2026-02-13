@@ -84,6 +84,28 @@ def _get_openai_client(model: Optional[str] = None) -> BaseLLMClient:
             )
 
 
+def _get_gemini_client(model: Optional[str] = None) -> BaseLLMClient:
+    """
+    Geminiクライアントを取得（LangChain経由）
+
+    Args:
+        model: 使用するモデル名
+
+    Returns:
+        LLMクライアントインスタンス
+    """
+    try:
+        from minitools.llm.langchain_gemini import LangChainGeminiClient
+
+        logger.debug("Using LangChain Gemini client")
+        return LangChainGeminiClient(model=model)
+    except ImportError as e:
+        raise LLMError(
+            f"langchain-google-genai not available ({e}). "
+            "Install with: uv add langchain-google-genai"
+        )
+
+
 def get_llm_client(
     provider: Optional[str] = None,
     model: Optional[str] = None,
@@ -94,7 +116,7 @@ def get_llm_client(
     LangChainベースの実装を優先使用し、ImportError時はネイティブクライアントにフォールバックします。
 
     Args:
-        provider: LLMプロバイダー名（"ollama" または "openai"）
+        provider: LLMプロバイダー名（"ollama", "openai", "gemini"）
                   省略時は設定ファイルから取得
         model: 使用するモデル名（省略時は各プロバイダーのデフォルトを使用）
 
@@ -120,8 +142,11 @@ def get_llm_client(
             logger.warning(f"OpenAI initialization failed: {e}. Falling back to Ollama.")
             return _get_ollama_client(model=model)
 
+    elif use_provider == "gemini":
+        return _get_gemini_client(model=model)
+
     else:
         raise ValueError(
             f"Unsupported LLM provider: {use_provider}. "
-            f"Supported providers: ollama, openai"
+            f"Supported providers: ollama, openai, gemini"
         )

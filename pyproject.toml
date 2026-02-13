@@ -28,6 +28,7 @@ dependencies = [
     "langchain-ollama>=0.3.0",
     "langchain-openai>=0.3.0",
     "tavily-python>=0.3.0",
+    "langchain-google-genai>=4.2.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,7 @@ google-alerts = "scripts.google_alerts:main"
 youtube = "scripts.youtube:main"
 google-alert-weekly-digest = "scripts.google_alert_weekly_digest:main"
 arxiv-weekly = "scripts.arxiv_weekly:main"
+medium-translate = "scripts.medium_translate:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -100,6 +100,11 @@ class SlackPublisher:
             # 著者
             if 'author' in article:
                 message += f"   👤 {article['author']}\n"
+
+            # Claps（拍手数）
+            claps = article.get('claps', 0)
+            if claps:
+                message += f"   👏 {claps:,}\n"
             
             # 要約（日本語優先）
             summary = article.get('japanese_summary') or article.get('summary', '')

@@ -30,15 +30,22 @@ flowchart TB
         TrendR["TrendResearcher"]
     end
 
+    subgraph Scrapers["スクレイピングレイヤー"]
+        MS["MediumScraper"]
+        MDC["MarkdownConverter"]
+    end
+
     subgraph LLMLayer["LLM抽象化レイヤー"]
         LLMFactory["get_llm_client()"]
         OC["OllamaClient"]
         OpenAIC["OpenAIClient"]
+        GeminiC["GeminiClient"]
     end
 
     subgraph Processors["処理レイヤー"]
         TR["Translator"]
         SU["Summarizer"]
+        FTT["FullTextTranslator"]
         WDP["WeeklyDigestProcessor"]
         AWP["ArxivWeeklyProcessor"]
         DD["DuplicateDetector"]
@@ -52,6 +59,7 @@ flowchart TB
 
     subgraph Publishers["出力レイヤー"]
         NP["NotionPublisher"]
+        NBB["NotionBlockBuilder"]
         SP["SlackPublisher"]
     end
 
@@ -72,8 +80,15 @@ flowchart TB
     YC --> SU
     NR --> WDP
 
+    MS --> MDC
+    MDC --> FTT
+    FTT <--> LLMFactory
+    FTT --> NBB
+    NBB --> NP
+
     LLMFactory --> OC
     LLMFactory --> OpenAIC
+    LLMFactory --> GeminiC
     TR <--> OC
     SU <--> OC
     WDP <--> LLMFactory
@@ -102,6 +117,7 @@ flowchart TB
     subgraph scripts["scripts/"]
         arxiv["arxiv.py"]
         medium["medium.py"]
+        medium_translate["medium_translate.py"]
         google_alerts["google_alerts.py"]
         youtube["youtube.py"]
         google_alert_weekly_digest["google_alert_weekly_digest.py"]
@@ -115,9 +131,15 @@ flowchart TB
         YC["YouTubeCollector"]
     end
 
+    subgraph scrapers["minitools/scrapers/"]
+        MS["MediumScraper"]
+        MDC["MarkdownConverter"]
+    end
+
     subgraph processors["minitools/processors/"]
         TR["Translator"]
         SU["Summarizer"]
+        FTT["FullTextTranslator"]
         WDP["WeeklyDigestProcessor"]
         AWP["ArxivWeeklyProcessor"]
         DD["DuplicateDetector"]
@@ -129,6 +151,7 @@ flowchart TB
 
     subgraph publishers["minitools/publishers/"]
         NP["NotionPublisher"]
+        NBB["NotionBlockBuilder"]
         SP["SlackPublisher"]
     end
 
@@ -146,6 +169,15 @@ flowchart TB
     medium --> TR
     medium --> NP
     medium --> SP
+    medium --> MS
+    medium --> FTT
+    medium --> NBB
+
+    medium_translate --> MS
+    medium_translate --> MDC
+    medium_translate --> FTT
+    medium_translate --> NBB
+    medium_translate --> NP
 
     google_alerts --> GAC
     google_alerts --> TR
@@ -219,6 +251,22 @@ flowchart LR
     I -->|Slack| K["SlackPublisher"]
 ```
 
+### Medium 全文翻訳フロー
+
+```mermaid
+flowchart LR
+    A["Medium URL"] --> B["MediumScraper\n(Playwright CDP)"]
+    B --> C["記事HTML"]
+    C --> D["MarkdownConverter"]
+    D --> E["構造化Markdown"]
+    E --> F["FullTextTranslator"]
+    F --> G["日本語Markdown"]
+    G --> H["NotionBlockBuilder"]
+    H --> I["Notionブロック"]
+    I --> J["NotionPublisher\nappend_blocks()"]
+    J --> K["既存ページに追記"]
+```
+
 ### Google Alerts 処理フロー
 
 ```mermaid
@@ -259,6 +307,7 @@ Ollama/OpenAIの両方をサポートするLLM抽象化レイヤー。
 |-------------|-----|----------------|---------|
 | Ollama | 翻訳・要約 | gemma3:27b | `llm.ollama.default_model` |
 | OpenAI | 高速処理 | gpt-4o-mini | `llm.openai.default_model` |
+| Gemini | 全文翻訳（無料枠活用） | gemini-2.5-flash | `llm.gemini.default_model` |
 
 **連携パターン（LLM抽象化レイヤー経由）:**
 ```python
@@ -292,7 +341,7 @@ response = client.chat(
 |-----|--------|---------|
 | 翻訳 | gemma3:27b | `models.translation` |
 | 要約 | gemma3:27b | `models.summarization` |
-| YouTube要約 | gemma2 | `models.youtube_summary` |
+| YouTube要約 | gemma3:12b | `models.youtube_summary` |
 
 ### Gmail API
 
@@ -342,7 +391,7 @@ page = client.pages.create(
 | ソース | Title | URL | Summary | その他 |
 |-------|-------|-----|---------|-------|
 | ArXiv | タイトル | URL | 日本語訳 | 公開日, 概要 |
-| Medium | Title | URL | Summary | Japanese Title, Author, Date |
+| Medium | Title | URL | Summary | Japanese Title, Author, Date, Claps (Number), Translated (Checkbox) |
 | Google Alerts | Title (日本語) | URL | Summary | Original Title, Source, Tags |
 
 ### Slack Webhook

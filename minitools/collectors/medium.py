@@ -44,6 +44,7 @@ class Article:
     url: str
     author: str
     preview: str = ""  # メールから抽出したプレビューテキスト
+    claps: int = 0  # 拍手数
     japanese_title: str = ""
     summary: str = ""
     japanese_summary: str = ""
@@ -259,19 +260,79 @@ class MediumCollector:
                         author = author_text
                         break
 
+            # 拍手数の抽出（great_grandparent コンテナから）
+            claps = self._extract_claps(great_grandparent)
+
             article = Article(
                 title=title,
                 url=clean_url,
                 author=author,
                 preview=preview,
+                claps=claps,
                 date_processed=datetime.now().isoformat()
             )
             articles.append(article)
-            logger.debug(f"記事を検出: {title[:50]}... by {author}, preview: {len(preview)} chars")
+            logger.debug(f"記事を検出: {title[:50]}... by {author}, claps: {claps}, preview: {len(preview)} chars")
         
         logger.info(f"Parsed {len(articles)} articles from email")
         return articles
     
+    @staticmethod
+    def _parse_count(count_str: str) -> int:
+        """
+        "1.2K" → 1200、"320" → 320 のようにカウント文字列を整数に変換
+
+        Args:
+            count_str: カウント文字列
+
+        Returns:
+            整数値（パース失敗時は0）
+        """
+        if not count_str:
+            return 0
+        count_str = count_str.strip().upper()
+        try:
+            if count_str.endswith('K'):
+                return int(float(count_str[:-1]) * 1000)
+            elif count_str.endswith('M'):
+                return int(float(count_str[:-1]) * 1000000)
+            else:
+                return int(count_str)
+        except (ValueError, IndexError):
+            return 0
+
+    def _extract_claps(self, container) -> int:
+        """
+        記事コンテナ要素から拍手数を抽出
+
+        Args:
+            container: BeautifulSoupの記事コンテナ要素
+
+        Returns:
+            拍手数（見つからない場合は0）
+        """
+        if not container:
+            return 0
+
+        text = container.get_text(separator=' ', strip=True)
+
+        # パターン1: "Claps" の後に数値 (例: "Claps 320", "Claps320", "Claps 1.2K")
+        match = re.search(r'Claps\s*([0-9][0-9.,]*[KkMm]?)', text)
+        if match:
+            return self._parse_count(match.group(1))
+
+        # パターン2: 拍手アイコン(👏)の後に数値
+        match = re.search(r'👏\s*([0-9][0-9.,]*[KkMm]?)', text)
+        if match:
+            return self._parse_count(match.group(1))
+
+        # パターン3: "min read" の後の数値列（min read → claps → responses）
+        match = re.search(r'min read\s+([0-9][0-9.,]*[KkMm]?)', text)
+        if match:
+            return self._parse_count(match.group(1))
+
+        return 0
+
     def _clean_url(self, url: str) -> str:
         """
         URLをクリーンアップ（トラッキングパラメータ除去）

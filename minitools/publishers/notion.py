@@ -4,7 +4,7 @@ Notion publisher module for saving content to Notion databases.
 
 import os
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from notion_client import Client
 
 from minitools.utils.logger import get_logger
@@ -84,7 +84,7 @@ class NotionPublisher:
             loop = asyncio.get_event_loop()
             
             # まずHTTPS版で検索
-            result = await loop.run_in_executor(
+            result = cast(Dict[str, Any], await loop.run_in_executor(
                 None,
                 lambda: self.client.databases.query(
                     database_id=database_id,
@@ -93,17 +93,17 @@ class NotionPublisher:
                         "url": {"equals": normalized_url}
                     }
                 )
-            )
-            
+            ))
+
             exists = len(result.get('results', [])) > 0
             logger.debug(f"  Query result count: {len(result.get('results', []))}")
-            
+
             # HTTPS版で見つからない場合、HTTP版でも検索（過去データとの互換性）
             if not exists and self.source_type == 'arxiv' and normalized_url.startswith('https://'):
                 http_url = normalized_url.replace('https://', 'http://')
                 logger.info(f"  Checking HTTP version: {http_url}")
-                
-                result = await loop.run_in_executor(
+
+                result = cast(Dict[str, Any], await loop.run_in_executor(
                     None,
                     lambda: self.client.databases.query(
                         database_id=database_id,
@@ -112,8 +112,8 @@ class NotionPublisher:
                             "url": {"equals": http_url}
                         }
                     )
-                )
-                
+                ))
+
                 exists = len(result.get('results', [])) > 0
                 logger.info(f"  HTTP query result count: {len(result.get('results', []))}")
                 
@@ -147,14 +147,14 @@ class NotionPublisher:
         """
         try:
             loop = asyncio.get_event_loop()
-            page = await loop.run_in_executor(
+            page = cast(Dict[str, Any], await loop.run_in_executor(
                 None,
                 lambda: self.client.pages.create(
                     parent={"database_id": database_id},
                     properties=properties
                 )
-            )
-            
+            ))
+
             page_id = page.get('id')
             logger.debug(f"Notionページ作成完了: {page_id}")
             return page_id
@@ -230,14 +230,14 @@ class NotionPublisher:
         Returns:
             Notionプロパティ辞書（日本語プロパティ名）
         """
-        properties = {}
-        
+        properties: Dict[str, Any] = {}
+
         # タイトル（日本語プロパティ名）
         if 'title' in article_data:
             properties['タイトル'] = {
                 "title": [{"text": {"content": article_data['title']}}]
             }
-        
+
         # 公開日
         if 'published' in article_data:
             properties['公開日'] = {
@@ -296,14 +296,14 @@ class NotionPublisher:
         Returns:
             Notionプロパティ辞書
         """
-        properties = {}
-        
+        properties: Dict[str, Any] = {}
+
         # Title（英語タイトル）
         if 'title' in article_data:
             properties['Title'] = {
                 "title": [{"text": {"content": article_data['title']}}]
             }
-        
+
         # Japanese Title（日本語タイトル）
         if 'japanese_title' in article_data:
             properties['Japanese Title'] = {
@@ -337,7 +337,13 @@ class NotionPublisher:
             properties['Summary'] = {
                 "rich_text": [{"text": {"content": article_data['summary'][:2000]}}]
             }
-        
+
+        # Claps（拍手数）
+        if 'claps' in article_data and article_data['claps']:
+            properties['Claps'] = {
+                "number": article_data['claps']
+            }
+
         return properties
     
     def _build_google_alerts_properties(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -350,8 +356,8 @@ class NotionPublisher:
         Returns:
             Notionプロパティ辞書（英語プロパティ名）
         """
-        properties = {}
-        
+        properties: Dict[str, Any] = {}
+
         # タイトル (日本語タイトルをメインのTitleに)
         if 'japanese_title' in article_data:
             properties['Title'] = {
@@ -426,7 +432,7 @@ class NotionPublisher:
         """
         semaphore = asyncio.Semaphore(max_concurrent)
         stats = {"success": 0, "skipped": 0, "failed": 0}
-        results = {"success": [], "skipped": [], "failed": []}
+        results: Dict[str, List[str]] = {"success": [], "skipped": [], "failed": []}
         
         async def save_with_semaphore(article):
             async with semaphore:
@@ -469,3 +475,151 @@ class NotionPublisher:
                 logger.info(f"  ✗ {title}")
         
         return {"stats": stats, "results": results}
+
+    async def update_page_properties(self, page_id: str, properties: Dict[str, Any]) -> bool:
+        """
+        既存ページのプロパティを更新
+
+        Args:
+            page_id: NotionページID
+            properties: 更新するプロパティ辞書
+
+        Returns:
+            更新成功の場合True
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.pages.update(
+                    page_id=page_id,
+                    properties=properties
+                )
+            )
+            logger.debug(f"Page properties updated: {page_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update page properties ({page_id}): {e}")
+            return False
+
+    async def find_page_by_url(self, database_id: str, url: str) -> Optional[str]:
+        """
+        URLでNotionデータベースを検索し、既存ページのpage_idを返す
+
+        Args:
+            database_id: NotionデータベースID
+            url: 検索するURL
+
+        Returns:
+            ページID（見つからない場合はNone）
+        """
+        try:
+            normalized_url = self._normalize_url_by_source(url)
+
+            logger.info(f"Finding page by URL: {normalized_url}")
+
+            loop = asyncio.get_event_loop()
+            result = cast(Dict[str, Any], await loop.run_in_executor(
+                None,
+                lambda: self.client.databases.query(
+                    database_id=database_id,
+                    filter={
+                        "property": "URL",
+                        "url": {"equals": normalized_url}
+                    }
+                )
+            ))
+
+            query_results = result.get('results', [])
+            if query_results:
+                page_id = query_results[0].get('id')
+                logger.info(f"Page found: {page_id}")
+                return page_id
+
+            logger.info(f"Page not found for URL: {url}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding page by URL: {e}")
+            return None
+
+    async def append_blocks(self, page_id: str, blocks: List[Dict[str, Any]]) -> bool:
+        """
+        既存ページにブロックを追記する
+
+        Args:
+            page_id: NotionページID
+            blocks: 追記するNotionブロックのリスト
+
+        Returns:
+            追記成功の場合True
+        """
+        if not blocks:
+            logger.warning("No blocks to append")
+            return False
+
+        try:
+            return await self._batch_append_blocks(page_id, blocks)
+        except Exception as e:
+            logger.error(f"Error appending blocks to page {page_id}: {e}")
+            return False
+
+    async def _batch_append_blocks(
+        self, page_id: str, blocks: List[Dict[str, Any]], batch_size: int = 100
+    ) -> bool:
+        """
+        ブロックをバッチ単位で追記する（Notion APIの100ブロック制限対応）
+
+        Args:
+            page_id: NotionページID
+            blocks: 追記するブロックのリスト
+            batch_size: バッチサイズ（デフォルト: 100）
+
+        Returns:
+            全バッチの追記成功の場合True
+        """
+        total_batches = (len(blocks) + batch_size - 1) // batch_size
+        logger.info(
+            f"Appending {len(blocks)} blocks in {total_batches} batch(es) "
+            f"to page {page_id[:8]}..."
+        )
+
+        loop = asyncio.get_event_loop()
+
+        for i in range(0, len(blocks), batch_size):
+            batch = blocks[i:i + batch_size]
+            batch_num = i // batch_size + 1
+
+            logger.info(
+                f"  Batch {batch_num}/{total_batches}: "
+                f"{len(batch)} blocks"
+            )
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        lambda b=batch: self.client.blocks.children.append(  # type: ignore[misc]
+                            block_id=page_id,
+                            children=b
+                        )
+                    )
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        delay = 2 ** attempt
+                        logger.warning(
+                            f"  Batch {batch_num} failed (attempt {attempt + 1}): "
+                            f"{e}, retrying in {delay}s..."
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(
+                            f"  Batch {batch_num} failed after "
+                            f"{max_retries} attempts: {e}"
+                        )
+                        return False
+
+        logger.info(f"All {len(blocks)} blocks appended successfully")
+        return True

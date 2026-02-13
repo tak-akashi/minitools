@@ -46,6 +46,13 @@ async def main_async():
                        help='テストモード（最初の1記事のみ処理）')
     parser.add_argument('--use-jina', action='store_true',
                        help='Jina AI Readerを使用して記事本文を取得（デフォルトはメールのプレビューを使用）')
+    parser.add_argument('--translate', action='store_true',
+                       help='拍手数が閾値以上の記事を全文翻訳してNotionに追記')
+    parser.add_argument('--cdp', action='store_true',
+                       help='実際のChromeにCDP接続（Cloudflare回避、--translate使用時に推奨）')
+    parser.add_argument('--provider', choices=['ollama', 'openai', 'gemini'],
+                       default=None,
+                       help='全文翻訳のLLMプロバイダー（--translate使用時）')
 
     args = parser.parse_args()
 
@@ -160,6 +167,7 @@ async def main_async():
                     'title': article.title,
                     'url': article.url,
                     'author': article.author,
+                    'claps': article.claps,
                     'japanese_title': article.japanese_title,
                     'japanese_summary': article.japanese_summary,
                     'date': target_date.strftime('%Y-%m-%d')
@@ -224,6 +232,72 @@ async def main_async():
             except Exception as e:
                 logger.error(f"Slackへの送信エラー: {e}")
     
+    # 全文翻訳モード
+    if args.translate and processed_articles:
+        clap_threshold = config.get('defaults.medium.translate_clap_threshold', 100)
+        translate_targets = [
+            a for a in processed_articles
+            if a.get('claps', 0) >= clap_threshold
+        ]
+
+        if translate_targets:
+            logger.info(f"全文翻訳対象: {len(translate_targets)}件 (拍手数 >= {clap_threshold})")
+
+            from minitools.scrapers.medium_scraper import MediumScraper
+            from minitools.scrapers.markdown_converter import MarkdownConverter
+            from minitools.processors.full_text_translator import FullTextTranslator
+            from minitools.publishers.notion_block_builder import NotionBlockBuilder
+
+            database_id = os.getenv('NOTION_MEDIUM_DATABASE_ID') or os.getenv('NOTION_DB_ID_DAILY_DIGEST')
+            if database_id:
+                converter = MarkdownConverter()
+                ft_translator = FullTextTranslator(provider=args.provider)
+                block_builder = NotionBlockBuilder()
+                notion_pub = NotionPublisher(source_type='medium')
+
+                translate_stats = {"success": 0, "skipped": 0, "failed": 0}
+
+                async with MediumScraper(cdp_mode=args.cdp) as scraper:
+                    for article in translate_targets:
+                        url = article.get('url', '')
+                        try:
+                            html = await scraper.scrape_article(url)
+                            if not html:
+                                translate_stats["failed"] += 1
+                                continue
+
+                            md = converter.convert(html)
+                            translated = await ft_translator.translate(md)
+
+                            page_id = await notion_pub.find_page_by_url(database_id, url)
+                            if not page_id:
+                                logger.warning(f"Page not found for URL: {url}")
+                                translate_stats["skipped"] += 1
+                                continue
+
+                            blocks = block_builder.build_blocks(translated)
+                            success = await notion_pub.append_blocks(page_id, blocks)
+
+                            if success:
+                                await notion_pub.update_page_properties(page_id, {
+                                    "Translated": {"checkbox": True}
+                                })
+                                translate_stats["success"] += 1
+                            else:
+                                translate_stats["failed"] += 1
+                        except Exception as e:
+                            logger.error(f"Translation error for {url}: {e}")
+                            translate_stats["failed"] += 1
+
+                logger.info("=" * 60)
+                logger.info("全文翻訳結果:")
+                logger.info(f"  成功: {translate_stats['success']}件")
+                logger.info(f"  スキップ: {translate_stats['skipped']}件")
+                logger.info(f"  失敗: {translate_stats['failed']}件")
+                logger.info("=" * 60)
+        else:
+            logger.info(f"拍手数 >= {clap_threshold} の記事がないため、全文翻訳はスキップします")
+
     logger.info("処理が完了しました")
     if processed_articles:
         logger.info(f"  処理記事数: {len(processed_articles)}件")

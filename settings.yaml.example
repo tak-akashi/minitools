@@ -24,6 +24,26 @@ llm:
       scoring: "gpt-4o-mini"       # 重要度スコアリング用
       summarization: "gpt-4o-mini" # 要約生成用
 
+  # Gemini設定（GEMINI_API_KEY環境変数が必要）
+  gemini:
+    default_model: "gemini-2.5-flash"
+
+# ========================================
+# Embedding設定（類似記事検出用）
+# ========================================
+embedding:
+  # Embeddingプロバイダー: "ollama" または "openai"
+  # OpenAIを推奨（Ollamaの場合は ollama pull nomic-embed-text が必要）
+  provider: "openai"
+
+  # Ollama設定
+  ollama:
+    model: "nomic-embed-text"
+
+  # OpenAI設定
+  openai:
+    model: "text-embedding-3-small"
+
 # ========================================
 # Ollamaモデル設定（従来の翻訳・要約用）
 # ========================================
@@ -71,7 +91,11 @@ defaults:
   # Medium Daily Digest
   medium:
     fetch_today: true              # 今日のダイジェストを取得
-    
+    use_jina_reader: false         # Jina AI Readerを使用（falseの場合はメールのプレビューを使用）
+    translate_clap_threshold: 100  # 自動翻訳の拍手数閾値
+    translate_provider: ollama     # 翻訳LLMプロバイダー
+    translate_model: gemma3:27b    # 翻訳モデル
+
   # YouTube要約
   youtube:
     output_dir: "outputs"          # 出力ディレクトリ
@@ -79,20 +103,26 @@ defaults:
     audio_quality: "192"           # 音声品質（kbps）
     temp_dir: "outputs/temp"       # 一時ファイルディレクトリ
 
-  # 週次ダイジェスト
+  # Weekly Digest（週次AIダイジェスト）
   weekly_digest:
-    days_back: 7                   # 集計対象の日数
-    top_articles: 20               # 上位記事数
+    days_back: 7                   # 過去何日分の記事を取得するか
+    top_articles: 20               # 上位何件の記事を選出するか
+    provider: "openai"             # デフォルトLLMプロバイダー（高速なバッチ処理のため）
+    batch_size: 20                 # バッチスコアリングのサイズ
+    # 類似記事除去設定
+    deduplication:
+      enabled: true                # 類似記事除去を有効にするか
+      similarity_threshold: 0.85   # 類似度閾値（0.80-0.90推奨）
+      buffer_ratio: 2.5            # 候補記事の倍率（top_articles * buffer_ratio）
+      embedding_model: "nomic-embed-text"  # Embeddingモデル
 
-# ========================================
-# 週次ダイジェスト設定
-# ========================================
-weekly_digest:
-  deduplication:
-    enabled: true                  # 類似記事の重複除去を行うか
-    similarity_threshold: 0.85    # 類似度閾値（0.0-1.0）
-    buffer_ratio: 2.5              # 重複除去時の候補記事倍率
-    embedding_model: "nomic-embed-text"  # Embeddingモデル（Ollama用）
+  # ArXiv Weekly Digest（ArXiv論文週次ダイジェスト）
+  arxiv_weekly:
+    days_back: 7                   # 過去何日分の論文を取得するか
+    top_papers: 10                 # 上位何件の論文を選出するか
+    provider: "openai"             # デフォルトLLMプロバイダー（高速なバッチ処理のため）
+    batch_size: 20                 # バッチスコアリングのサイズ
+    trend_query: "AI machine learning latest trends breakthroughs"  # Tavilyトレンド検索クエリ
 
 # ========================================
 # ログ設定

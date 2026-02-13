@@ -1,0 +1,238 @@
+"""
+Full-text Markdown translator using LLM abstraction layer.
+Translates structured Markdown while preserving formatting.
+"""
+
+import asyncio
+import re
+from typing import List, Optional
+
+from minitools.llm import get_llm_client, BaseLLMClient
+from minitools.utils.config import get_config
+from minitools.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+# デフォルトのチャンクサイズ（文字数）
+DEFAULT_CHUNK_SIZE = 6000
+
+TRANSLATION_PROMPT = """あなたはプロの翻訳者です。以下のMarkdownテキストを日本語に翻訳してください。
+
+## 翻訳ルール
+
+1. **Markdown構造を維持**: 見出し（#, ##, ###）、箇条書き（-）、番号付きリスト（1.）、引用（>）、太字（**）、イタリック（*）、リンク（[text](url)）の形式をそのまま維持してください。
+2. **コードブロック非翻訳**: ```で囲まれたコードブロック内のコード本体は翻訳しないでください。ただし、コード内のコメント（#や//で始まる行）は翻訳してください。
+3. **インラインコード非翻訳**: `バッククォート`で囲まれたインラインコードは翻訳しないでください。
+4. **画像リンク非翻訳**: ![alt](url) 形式の画像リンクはそのまま維持してください。
+5. **URL非翻訳**: URLはそのまま維持してください。
+6. **自然な日本語**: 技術的に正確で、自然な日本語にしてください。
+
+## 翻訳対象テキスト
+
+{text}
+
+## 翻訳結果（Markdownのみ、説明なし）
+"""
+
+
+class FullTextTranslator:
+    """構造化Markdownの全文翻訳を行うクラス"""
+
+    def __init__(
+        self,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        llm_client: Optional[BaseLLMClient] = None,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        max_retries: int = 3,
+    ):
+        """
+        Args:
+            provider: LLMプロバイダー名（"ollama" or "openai"）
+            model: 使用するモデル名
+            llm_client: LLMクライアント（テスト用に直接注入可能）
+            chunk_size: チャンク分割のサイズ（文字数）
+            max_retries: 翻訳失敗時のリトライ回数
+        """
+        config = get_config()
+        self.provider = provider or config.get(
+            "defaults.medium.translate_provider",
+            config.get("llm.provider", "ollama"),
+        )
+        # モデルはプロバイダーのデフォルトに委譲（明示指定時のみ上書き）
+        self.model = model or config.get(
+            f"llm.{self.provider}.default_model", None
+        )
+        self.chunk_size = chunk_size
+        self.max_retries = max_retries
+
+        if llm_client:
+            self.llm = llm_client
+        else:
+            self.llm = get_llm_client(provider=self.provider, model=self.model)
+
+        logger.info(
+            f"FullTextTranslator initialized "
+            f"(provider={self.provider}, model={self.model}, "
+            f"chunk_size={chunk_size})"
+        )
+
+    async def translate(self, markdown: str) -> str:
+        """
+        Markdown全文を日本語に翻訳する
+
+        Args:
+            markdown: 翻訳対象のMarkdown文字列
+
+        Returns:
+            翻訳済みのMarkdown文字列
+        """
+        if not markdown or not markdown.strip():
+            return ""
+
+        chunks = self._split_into_chunks(markdown)
+        logger.info(f"Translating {len(chunks)} chunk(s)")
+
+        translated_chunks: List[str] = []
+        for i, chunk in enumerate(chunks):
+            logger.info(
+                f"  Translating chunk {i + 1}/{len(chunks)} "
+                f"({len(chunk)} chars)"
+            )
+            translated = await self._translate_chunk(chunk)
+            translated_chunks.append(translated)
+
+        return "\n\n".join(translated_chunks)
+
+    def _split_into_chunks(self, markdown: str) -> List[str]:
+        """
+        Markdownをセクション単位でチャンクに分割する
+
+        見出し行（# で始まる行）を区切りとして分割し、
+        各チャンクがchunk_size以下になるようにする。
+        見出しがない大きなセクションは段落単位でさらに分割する。
+
+        Args:
+            markdown: 分割対象のMarkdown文字列
+
+        Returns:
+            チャンクのリスト
+        """
+        if len(markdown) <= self.chunk_size:
+            return [markdown]
+
+        # 見出し行で分割
+        sections: List[str] = []
+        current_section: List[str] = []
+
+        for line in markdown.split("\n"):
+            # 見出し行を検出（新しいセクションの開始）
+            if re.match(r"^#{1,3}\s+", line) and current_section:
+                sections.append("\n".join(current_section))
+                current_section = [line]
+            else:
+                current_section.append(line)
+
+        # 最後のセクションを追加
+        if current_section:
+            sections.append("\n".join(current_section))
+
+        # 大きすぎるセクションを段落単位で分割
+        split_sections: List[str] = []
+        for section in sections:
+            if len(section) <= self.chunk_size:
+                split_sections.append(section)
+            else:
+                split_sections.extend(self._split_large_section(section))
+
+        # セクションをチャンクサイズに収まるようにグルーピング
+        chunks: List[str] = []
+        current_chunk: List[str] = []
+        current_size = 0
+
+        for section in split_sections:
+            section_size = len(section)
+
+            if current_size + section_size > self.chunk_size and current_chunk:
+                chunks.append("\n\n".join(current_chunk))
+                current_chunk = [section]
+                current_size = section_size
+            else:
+                current_chunk.append(section)
+                current_size += section_size
+
+        if current_chunk:
+            chunks.append("\n\n".join(current_chunk))
+
+        return chunks
+
+    def _split_large_section(self, section: str) -> List[str]:
+        """
+        chunk_sizeを超えるセクションを段落（空行）単位で分割する
+
+        Args:
+            section: 分割対象のセクション文字列
+
+        Returns:
+            分割されたセクションのリスト
+        """
+        paragraphs = re.split(r"\n\n+", section)
+
+        chunks: List[str] = []
+        current: List[str] = []
+        current_size = 0
+
+        for para in paragraphs:
+            para_size = len(para)
+
+            if current_size + para_size > self.chunk_size and current:
+                chunks.append("\n\n".join(current))
+                current = [para]
+                current_size = para_size
+            else:
+                current.append(para)
+                current_size += para_size
+
+        if current:
+            chunks.append("\n\n".join(current))
+
+        return chunks
+
+    async def _translate_chunk(self, chunk: str) -> str:
+        """
+        1つのチャンクを翻訳する（リトライ付き）
+
+        Args:
+            chunk: 翻訳対象のチャンク
+
+        Returns:
+            翻訳済みテキスト
+        """
+        prompt = TRANSLATION_PROMPT.format(text=chunk)
+
+        for attempt in range(self.max_retries):
+            try:
+                result = await self.llm.chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    model=self.model,
+                )
+                translated = result.strip()
+                if translated:
+                    return translated
+                logger.warning(
+                    f"Empty translation result (attempt {attempt + 1})"
+                )
+            except Exception as e:
+                delay = 2**attempt  # 指数バックオフ: 1, 2, 4秒
+                logger.warning(
+                    f"Translation error (attempt {attempt + 1}/{self.max_retries}): "
+                    f"{e}, retrying in {delay}s..."
+                )
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(delay)
+
+        logger.error(
+            f"Translation failed after {self.max_retries} attempts, "
+            f"returning original text"
+        )
+        return chunk

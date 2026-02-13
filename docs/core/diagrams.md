@@ -123,6 +123,69 @@ sequenceDiagram
     CLI-->>User: 処理完了
 ```
 
+### Medium 全文翻訳フロー
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as scripts/medium_translate.py
+    participant MS as MediumScraper
+    participant Chrome as Chrome (CDP)
+    participant MDC as MarkdownConverter
+    participant FTT as FullTextTranslator
+    participant LLM as LLM Client
+    participant NBB as NotionBlockBuilder
+    participant NP as NotionPublisher
+    participant Notion
+
+    User->>CLI: medium-translate --url "https://..." --cdp --provider gemini
+
+    CLI->>MS: __aenter__(cdp_mode=True)
+    MS->>Chrome: connect_over_cdp(localhost:9222)
+    Chrome-->>MS: browser context
+    MS-->>CLI: scraper
+
+    loop 各URL
+        CLI->>MS: scrape_article(url)
+        MS->>Chrome: goto(url)
+        Chrome-->>MS: page loaded
+        MS->>MS: _is_cloudflare_challenge()
+        MS->>Chrome: query_selector("article")
+        Chrome-->>MS: article HTML
+        MS-->>CLI: html
+
+        CLI->>MDC: convert(html)
+        MDC-->>CLI: markdown
+
+        CLI->>FTT: translate(markdown)
+        Note over FTT: チャンク分割（見出しベース）
+        loop 各チャンク
+            FTT->>LLM: chat(translate_prompt)
+            LLM-->>FTT: translated_chunk
+        end
+        FTT-->>CLI: translated_markdown
+
+        alt not dry-run
+            CLI->>NP: find_page_by_url(database_id, url)
+            NP->>Notion: databases.query(filter=url)
+            Notion-->>NP: page_id
+            NP-->>CLI: page_id
+
+            CLI->>NBB: build_blocks(translated_markdown)
+            NBB-->>CLI: blocks[]
+
+            CLI->>NP: append_blocks(page_id, blocks)
+            Note over NP: 100ブロック単位でバッチ追記
+            NP->>Notion: blocks.children.append()
+            Notion-->>NP: OK
+            NP-->>CLI: success
+        end
+    end
+
+    CLI->>MS: __aexit__()
+    CLI-->>User: 処理完了サマリー
+```
+
 ### Google Alerts 処理フロー
 
 ```mermaid
@@ -448,6 +511,9 @@ classDiagram
         +create_page(database_id, properties)
         +save_article(database_id, article_data)
         +batch_save_articles(database_id, articles, max_concurrent)
+        +find_page_by_url(database_id, url)
+        +append_blocks(page_id, blocks)
+        +update_page_properties(page_id, properties)
         -_normalize_url_by_source(url)
         -_build_article_properties(article_data)
         -_build_arxiv_properties(article_data)
@@ -464,6 +530,10 @@ classDiagram
         +send_message(message, webhook_url)
         +format_articles_message(articles, date, title)
         +send_articles(articles, webhook_url, date, title)
+        +format_weekly_digest(digest_data)
+        +send_weekly_digest(digest_data, webhook_url)
+        +format_arxiv_weekly(digest_data)
+        +send_arxiv_weekly(digest_data, webhook_url)
     }
 
     class Config {
@@ -486,6 +556,7 @@ classDiagram
         +str summary
         +str japanese_summary
         +str date_processed
+        +int claps
     }
 
     class Alert {
@@ -599,6 +670,49 @@ classDiagram
         +chat_json(messages, model)
     }
 
+    class LangChainGeminiClient {
+        +str api_key
+        +str default_model
+        +chat(messages, model)
+        +generate(prompt, model)
+        +chat_json(messages, model)
+    }
+
+    class MediumScraper {
+        +bool headless
+        +bool cdp_mode
+        +__aenter__()
+        +__aexit__()
+        +scrape_article(url)
+        -_connect_cdp()
+        -_launch_standalone()
+        -_is_cloudflare_challenge()
+        -_is_error_page()
+    }
+
+    class MarkdownConverter {
+        +convert(html)
+        -_extract_article_body(soup)
+        -_process_element(element)
+        -_process_code_block(element)
+        -_detect_language(code_element)
+    }
+
+    class FullTextTranslator {
+        +BaseLLMClient client
+        +int chunk_size
+        +int max_retries
+        +translate(markdown)
+        -_split_into_chunks(markdown)
+        -_translate_chunk(chunk)
+    }
+
+    class NotionBlockBuilder {
+        +build_blocks(markdown)
+        -_parse_line(line)
+        -_build_rich_text(text)
+    }
+
     class OllamaEmbeddingClient {
         +str model
         +embed_texts(texts)
@@ -624,8 +738,13 @@ classDiagram
 
     LangChainOllamaClient --|> BaseLLMClient : implements
     LangChainOpenAIClient --|> BaseLLMClient : implements
+    LangChainGeminiClient --|> BaseLLMClient : implements
     OllamaEmbeddingClient --|> BaseEmbeddingClient : implements
     OpenAIEmbeddingClient --|> BaseEmbeddingClient : implements
+
+    MediumScraper ..> MarkdownConverter : provides HTML to
+    FullTextTranslator --> BaseLLMClient : uses
+    NotionBlockBuilder ..> NotionPublisher : provides blocks to
 ```
 
 ## 非同期処理の状態遷移図

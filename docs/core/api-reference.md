@@ -414,7 +414,7 @@ def get_llm_client(
     ネイティブクライアントにフォールバックします。
 
     Args:
-        provider: LLMプロバイダー名（"ollama" または "openai"）
+        provider: LLMプロバイダー名（"ollama", "openai", "gemini"）
                   省略時は設定ファイルから取得
         model: 使用するモデル名（省略時は各プロバイダーのデフォルトを使用）
 
@@ -437,6 +437,9 @@ client = get_llm_client()
 # プロバイダーとモデルを指定
 client = get_llm_client(provider="openai", model="gpt-4o")
 
+# Geminiプロバイダーを指定
+client = get_llm_client(provider="gemini", model="gemini-2.5-flash")
+
 # 共通インターフェースで呼び出し
 response = await client.chat([
     {"role": "user", "content": "Hello!"}
@@ -455,9 +458,9 @@ json_response = await client.chat_json([
 
 ### LangChainクライアントの追加メソッド
 
-LangChainベースのクライアント（`LangChainOllamaClient`, `LangChainOpenAIClient`）は、基底クラスの`chat()`、`generate()`に加えて以下のメソッドを提供します。
+LangChainベースのクライアント（`LangChainOllamaClient`, `LangChainOpenAIClient`, `LangChainGeminiClient`）は、基底クラスの`chat()`、`generate()`に加えて以下のメソッドを提供します。
 
-**ファイル:** `minitools/llm/langchain_ollama.py`, `minitools/llm/langchain_openai.py`
+**ファイル:** `minitools/llm/langchain_ollama.py`, `minitools/llm/langchain_openai.py`, `minitools/llm/langchain_gemini.py`
 
 ```python
 async def chat_json(
@@ -722,6 +725,92 @@ trends = await researcher.get_current_trends()
 if trends:
     print(f"Summary: {trends['summary']}")
     print(f"Topics: {trends['topics']}")
+```
+
+---
+
+## Scrapers
+
+### MediumScraper
+
+Playwrightを使用してMedium記事の全文HTMLを取得するクラス。CDP（Chrome DevTools Protocol）モードとスタンドアロンモードをサポート。
+
+**ファイル:** `minitools/scrapers/medium_scraper.py`
+
+```python
+class MediumScraper:
+    """Playwrightを使用してMedium記事の全文HTMLを取得するクラス"""
+
+    def __init__(
+        self,
+        headless: bool = True,
+        cdp_mode: bool = False,
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            headless: ヘッドレスモードで実行するか（CDPモードでは無視）
+            cdp_mode: Trueの場合、実際のChromeにCDP接続する
+        """
+
+    async def __aenter__(self) -> 'MediumScraper':
+        """ブラウザを起動/接続する"""
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """ブラウザを切断/閉じる"""
+
+    async def scrape_article(self, url: str) -> str:
+        """
+        記事URLから全文HTMLを取得する
+
+        Args:
+            url: Medium記事のURL
+
+        Returns:
+            記事のHTML文字列（取得失敗時は空文字列）
+        """
+```
+
+**使用例:**
+```python
+# CDPモード（推奨: Cloudflare回避）
+async with MediumScraper(cdp_mode=True) as scraper:
+    html = await scraper.scrape_article("https://medium.com/...")
+
+# スタンドアロンモード
+async with MediumScraper() as scraper:
+    html = await scraper.scrape_article("https://medium.com/...")
+```
+
+---
+
+### MarkdownConverter
+
+Medium記事のHTMLを構造化Markdownに変換するクラス。
+
+**ファイル:** `minitools/scrapers/markdown_converter.py`
+
+```python
+class MarkdownConverter:
+    """Medium記事HTMLを構造化Markdownに変換するクラス"""
+
+    def convert(self, html: str) -> str:
+        """
+        HTMLを構造化Markdownに変換
+
+        Args:
+            html: 記事のHTML文字列
+
+        Returns:
+            Markdown文字列
+        """
+```
+
+**使用例:**
+```python
+converter = MarkdownConverter()
+markdown = converter.convert(html)
 ```
 
 ---
@@ -1032,6 +1121,59 @@ uv run google-alert-weekly-digest --embedding openai # Embeddingのみ OpenAI �
 uv run google-alert-weekly-digest --dry-run       # Slack送信をスキップ
 uv run google-alert-weekly-digest --output out.md # ファイルに保存
 uv run google-alert-weekly-digest --no-dedup      # 類似記事除去をスキップ
+```
+
+---
+
+### FullTextTranslator
+
+記事全文を構造を維持しながら日本語に翻訳するクラス。見出しベースのチャンク分割とリトライ機能を備える。
+
+**ファイル:** `minitools/processors/full_text_translator.py`
+
+```python
+class FullTextTranslator:
+    """記事全文を構造維持で日本語翻訳するクラス"""
+
+    def __init__(
+        self,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        llm_client: Optional[BaseLLMClient] = None,
+        chunk_size: int = 6000,
+        max_retries: int = 3,
+    ):
+        """
+        コンストラクタ
+
+        Args:
+            provider: LLMプロバイダー（省略時は設定ファイルから取得）
+            model: 使用するモデル名（省略時は設定ファイルから取得）
+            llm_client: 既存のLLMクライアント（指定時はprovider/modelを無視）
+            chunk_size: チャンク分割の最大文字数（デフォルト: 6000）
+            max_retries: 最大リトライ回数（デフォルト: 3）
+        """
+
+    async def translate(self, markdown: str) -> str:
+        """
+        Markdown記事全文を日本語に翻訳
+
+        セクション（見出し）単位でチャンク分割し、
+        各チャンクを翻訳後に結合する。
+        コードブロック内のコード本体は翻訳しない。
+
+        Args:
+            markdown: 翻訳するMarkdown文字列
+
+        Returns:
+            翻訳されたMarkdown文字列
+        """
+```
+
+**使用例:**
+```python
+translator = FullTextTranslator(provider="gemini")
+translated_md = await translator.translate(markdown_text)
 ```
 
 ---
@@ -1415,6 +1557,54 @@ class NotionPublisher:
         Returns:
             {"stats": {success, skipped, failed}, "results": {...}}
         """
+
+    async def update_page_properties(
+        self,
+        page_id: str,
+        properties: Dict[str, Any]
+    ) -> bool:
+        """
+        既存ページのプロパティを更新
+
+        Args:
+            page_id: NotionページID
+            properties: 更新するプロパティ辞書
+
+        Returns:
+            更新成功の場合True
+        """
+
+    async def find_page_by_url(
+        self,
+        database_id: str,
+        url: str
+    ) -> Optional[str]:
+        """
+        URLでNotionデータベースを検索し、既存ページのIDを取得
+
+        Args:
+            database_id: NotionデータベースID
+            url: 検索するURL
+
+        Returns:
+            ページID（見つからない場合はNone）
+        """
+
+    async def append_blocks(
+        self,
+        page_id: str,
+        blocks: List[Dict[str, Any]]
+    ) -> bool:
+        """
+        既存ページにブロックを追記（100ブロック単位でバッチ処理）
+
+        Args:
+            page_id: 追記先のページID
+            blocks: Notionブロック形式の辞書リスト
+
+        Returns:
+            追記成功の場合True
+        """
 ```
 
 **使用例:**
@@ -1440,6 +1630,56 @@ result = await publisher.batch_save_articles(
     max_concurrent=3
 )
 print(f"成功: {result['stats']['success']}")
+
+# 既存ページにブロック追記（全文翻訳機能）
+page_id = await publisher.find_page_by_url(database_id="xxx", url="https://medium.com/...")
+if page_id:
+    blocks = NotionBlockBuilder().build_blocks(translated_markdown)
+    success = await publisher.append_blocks(page_id, blocks)
+    if success:
+        await publisher.update_page_properties(page_id, {
+            "Translated": {"checkbox": True}
+        })
+```
+
+---
+
+### NotionBlockBuilder
+
+Markdown文字列をNotion APIのブロック形式に変換するクラス。
+
+**ファイル:** `minitools/publishers/notion_block_builder.py`
+
+```python
+class NotionBlockBuilder:
+    """MarkdownをNotion APIブロック形式に変換するクラス"""
+
+    def build_blocks(self, markdown: str) -> List[Dict[str, Any]]:
+        """
+        Markdown文字列をNotionブロックのリストに変換
+
+        対応ブロックタイプ:
+        - divider（区切り線）
+        - heading_1, heading_2, heading_3
+        - paragraph
+        - code（言語指定付き）
+        - image（外部URL参照）
+        - bulleted_list_item, numbered_list_item
+        - quote
+
+        Args:
+            markdown: 変換するMarkdown文字列
+
+        Returns:
+            Notion APIブロック形式の辞書リスト
+        """
+```
+
+**使用例:**
+```python
+builder = NotionBlockBuilder()
+blocks = builder.build_blocks(translated_markdown)
+# blocksはNotion append block children APIに渡せる形式
 ```
 
 ---
@@ -1856,6 +2096,7 @@ class Article:
     title: str               # 記事タイトル
     url: str                 # 記事URL
     author: str              # 著者名
+    claps: int = 0           # 拍手数
     preview: str = ""        # メールから抽出したプレビューテキスト
     japanese_title: str = "" # 日本語タイトル
     summary: str = ""        # 英語要約
