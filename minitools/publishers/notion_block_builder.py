@@ -146,11 +146,97 @@ class NotionBlockBuilder:
         code = "\n".join(code_lines)
         return self._build_code_block(code, language), i
 
+    # Markdownインライン書式のパターン
+    _INLINE_PATTERN = re.compile(
+        r"`([^`]+)`"  # inline code: `text`
+        r"|\[([^\]]+)\]\(([^)]+)\)"  # link: [text](url)
+        r"|\*\*(.+?)\*\*"  # bold: **text**
+        r"|(?<!\*)\*([^*]+?)\*(?!\*)"  # italic: *text* (not inside bold)
+    )
+
     def _build_rich_text(self, text: str) -> List[Dict[str, Any]]:
         """
         テキストからNotionのrich_textオブジェクトを構築する
 
+        Markdownのインライン書式（太字、斜体、インラインコード、リンク）を
+        Notionのrich_text annotations/link形式に変換する。
         テキストが2000文字を超える場合は複数のrich_textに分割する。
+
+        Args:
+            text: テキスト文字列
+
+        Returns:
+            rich_textオブジェクトのリスト
+        """
+        if not text:
+            return [{"type": "text", "text": {"content": ""}}]
+
+        parts: List[Dict[str, Any]] = []
+        pos = 0
+
+        for match in self._INLINE_PATTERN.finditer(text):
+            # マッチ前のプレーンテキストを追加
+            if match.start() > pos:
+                plain = text[pos : match.start()]
+                parts.extend(self._build_plain_rich_text(plain))
+
+            if match.group(1) is not None:
+                # inline code: `text`
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": {"content": match.group(1)},
+                        "annotations": {"code": True},
+                    }
+                )
+            elif match.group(2) is not None:
+                # link: [text](url)
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": {
+                            "content": match.group(2),
+                            "link": {"url": match.group(3)},
+                        },
+                    }
+                )
+            elif match.group(4) is not None:
+                # bold: **text**
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": {"content": match.group(4)},
+                        "annotations": {"bold": True},
+                    }
+                )
+            elif match.group(5) is not None:
+                # italic: *text*
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": {"content": match.group(5)},
+                        "annotations": {"italic": True},
+                    }
+                )
+
+            pos = match.end()
+
+        # 残りのプレーンテキストを追加
+        if pos < len(text):
+            parts.extend(self._build_plain_rich_text(text[pos:]))
+
+        # マッチがなかった場合はプレーンテキスト全体
+        if not parts:
+            parts.extend(self._build_plain_rich_text(text))
+
+        return parts
+
+    def _build_plain_rich_text(self, text: str) -> List[Dict[str, Any]]:
+        """
+        プレーンテキストからNotionのrich_textオブジェクトを構築する
+
+        Markdown書式の解析を行わず、2000文字制限のみ対応する。
+        コードブロック内のテキストに使用する。
 
         Args:
             text: テキスト文字列
@@ -236,7 +322,7 @@ class NotionBlockBuilder:
             "object": "block",
             "type": "code",
             "code": {
-                "rich_text": self._build_rich_text(code),
+                "rich_text": self._build_plain_rich_text(code),
                 "language": notion_language,
             },
         }

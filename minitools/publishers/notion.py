@@ -4,12 +4,19 @@ Notion publisher module for saving content to Notion databases.
 
 import os
 import asyncio
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, NamedTuple, Optional, cast
 from notion_client import Client
 
 from minitools.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class PageInfo(NamedTuple):
+    """find_page_by_urlの返り値"""
+
+    page_id: str
+    is_translated: bool
 
 
 class NotionPublisher:
@@ -538,16 +545,18 @@ class NotionPublisher:
             logger.error(f"Failed to update page properties ({page_id}): {e}")
             return False
 
-    async def find_page_by_url(self, database_id: str, url: str) -> Optional[str]:
+    async def find_page_by_url(
+        self, database_id: str, url: str
+    ) -> Optional[PageInfo]:
         """
-        URLでNotionデータベースを検索し、既存ページのpage_idを返す
+        URLでNotionデータベースを検索し、既存ページの情報を返す
 
         Args:
             database_id: NotionデータベースID
             url: 検索するURL
 
         Returns:
-            ページID（見つからない場合はNone）
+            PageInfo(page_id, is_translated)（見つからない場合はNone）
         """
         try:
             normalized_url = self._normalize_url_by_source(url)
@@ -568,9 +577,17 @@ class NotionPublisher:
 
             query_results = result.get("results", [])
             if query_results:
-                page_id = query_results[0].get("id")
-                logger.info(f"Page found: {page_id}")
-                return page_id
+                page = query_results[0]
+                page_id = page.get("id")
+                is_translated = (
+                    page.get("properties", {})
+                    .get("Translated", {})
+                    .get("checkbox", False)
+                )
+                logger.info(
+                    f"Page found: {page_id} (translated: {is_translated})"
+                )
+                return PageInfo(page_id=page_id, is_translated=is_translated)
 
             logger.info(f"Page not found for URL: {url}")
             return None

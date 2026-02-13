@@ -32,11 +32,30 @@ class TestFindPageByUrl:
     async def test_find_existing_page(self, publisher):
         """既存ページが見つかる場合"""
         publisher.client.databases.query.return_value = {
-            "results": [{"id": "page-123"}]
+            "results": [{"id": "page-123", "properties": {}}]
         }
 
         result = await publisher.find_page_by_url("db-id", "https://medium.com/article")
-        assert result == "page-123"
+        assert result is not None
+        assert result.page_id == "page-123"
+        assert result.is_translated is False
+
+    @pytest.mark.asyncio
+    async def test_find_translated_page(self, publisher):
+        """翻訳済みページが見つかる場合"""
+        publisher.client.databases.query.return_value = {
+            "results": [
+                {
+                    "id": "page-456",
+                    "properties": {"Translated": {"checkbox": True}},
+                }
+            ]
+        }
+
+        result = await publisher.find_page_by_url("db-id", "https://medium.com/article")
+        assert result is not None
+        assert result.page_id == "page-456"
+        assert result.is_translated is True
 
     @pytest.mark.asyncio
     async def test_page_not_found(self, publisher):

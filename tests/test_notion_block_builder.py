@@ -187,21 +187,22 @@ class TestNotionBlockBuilderItalicLines:
     """イタリック行（キャプション等）のテスト"""
 
     def test_italic_line(self, builder):
-        """*text*がイタリック段落に変換される"""
+        """*text*がイタリックannotation付き段落に変換される"""
         blocks = builder.build_blocks("*Caption text*")
         para = blocks[1]
         assert para["type"] == "paragraph"
-        assert para["paragraph"]["rich_text"][0]["text"]["content"] == "*Caption text*"
+        rich_text = para["paragraph"]["rich_text"][0]
+        assert rich_text["text"]["content"] == "Caption text"
+        assert rich_text["annotations"]["italic"] is True
 
     def test_italic_line_with_spaces(self, builder):
         """前後にスペースのあるイタリック行"""
         blocks = builder.build_blocks("  *Figure 1: Diagram*  ")
         para = blocks[1]
         assert para["type"] == "paragraph"
-        assert (
-            "*Figure 1: Diagram*"
-            in para["paragraph"]["rich_text"][0]["text"]["content"]
-        )
+        rich_text = para["paragraph"]["rich_text"][0]
+        assert rich_text["text"]["content"] == "Figure 1: Diagram"
+        assert rich_text["annotations"]["italic"] is True
 
 
 class TestNotionBlockBuilderRichText:
@@ -219,6 +220,65 @@ class TestNotionBlockBuilderRichText:
         rich_text = builder._build_rich_text(None)
         assert len(rich_text) == 1
         assert rich_text[0]["text"]["content"] == ""
+
+    def test_bold_text(self, builder):
+        """**text**がbold annotationに変換される"""
+        rich_text = builder._build_rich_text("This is **bold** text")
+        assert len(rich_text) == 3
+        assert rich_text[0]["text"]["content"] == "This is "
+        assert rich_text[1]["text"]["content"] == "bold"
+        assert rich_text[1]["annotations"]["bold"] is True
+        assert rich_text[2]["text"]["content"] == " text"
+
+    def test_italic_text(self, builder):
+        """*text*がitalic annotationに変換される"""
+        rich_text = builder._build_rich_text("This is *italic* text")
+        assert len(rich_text) == 3
+        assert rich_text[0]["text"]["content"] == "This is "
+        assert rich_text[1]["text"]["content"] == "italic"
+        assert rich_text[1]["annotations"]["italic"] is True
+        assert rich_text[2]["text"]["content"] == " text"
+
+    def test_inline_code(self, builder):
+        """`code`がcode annotationに変換される"""
+        rich_text = builder._build_rich_text("Use `pip install` to install")
+        assert len(rich_text) == 3
+        assert rich_text[0]["text"]["content"] == "Use "
+        assert rich_text[1]["text"]["content"] == "pip install"
+        assert rich_text[1]["annotations"]["code"] is True
+        assert rich_text[2]["text"]["content"] == " to install"
+
+    def test_link(self, builder):
+        """[text](url)がNotion linkに変換される"""
+        rich_text = builder._build_rich_text(
+            "Visit [here](https://example.com) for more"
+        )
+        assert len(rich_text) == 3
+        assert rich_text[0]["text"]["content"] == "Visit "
+        assert rich_text[1]["text"]["content"] == "here"
+        assert rich_text[1]["text"]["link"]["url"] == "https://example.com"
+        assert rich_text[2]["text"]["content"] == " for more"
+
+    def test_mixed_formatting(self, builder):
+        """複数の書式が混在するテキスト"""
+        rich_text = builder._build_rich_text(
+            "**Bold** and *italic* and `code`"
+        )
+        assert rich_text[0]["text"]["content"] == "Bold"
+        assert rich_text[0]["annotations"]["bold"] is True
+        assert rich_text[1]["text"]["content"] == " and "
+        assert rich_text[2]["text"]["content"] == "italic"
+        assert rich_text[2]["annotations"]["italic"] is True
+        assert rich_text[3]["text"]["content"] == " and "
+        assert rich_text[4]["text"]["content"] == "code"
+        assert rich_text[4]["annotations"]["code"] is True
+
+    def test_plain_text_no_formatting(self, builder):
+        """書式なしテキストはプレーンテキストとして返される"""
+        rich_text = builder._build_rich_text("Just plain text")
+        assert len(rich_text) == 1
+        assert rich_text[0]["text"]["content"] == "Just plain text"
+        assert "annotations" not in rich_text[0]
 
 
 class TestNotionBlockBuilderComplex:
