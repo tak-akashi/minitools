@@ -43,9 +43,7 @@ class TestSlackPublisherArxivWeekly:
         """テスト用のトレンドサマリー"""
         return "2026年1月のAIトレンドでは、エージェントシステムとマルチモーダルモデルが注目されている。特にRAGの効率化と推論能力の向上が話題。"
 
-    def test_format_arxiv_weekly_with_trends(
-        self, sample_papers, sample_trend_summary
-    ):
+    def test_format_arxiv_weekly_with_trends(self, sample_papers, sample_trend_summary):
         """トレンド情報ありのフォーマットテスト"""
         publisher = SlackPublisher()
 

@@ -11,13 +11,15 @@ from tests.conftest import MockLLMClient, MockEmbeddingClient
 async def test_rank_articles_by_importance_basic(sample_articles):
     """基本的なスコアリングテスト"""
     # JSONレスポンスを設定
-    json_response = json.dumps({
-        "technical_impact": 8,
-        "industry_impact": 7,
-        "trending": 9,
-        "novelty": 8,
-        "reason": "Major release announcement"
-    })
+    json_response = json.dumps(
+        {
+            "technical_impact": 8,
+            "industry_impact": 7,
+            "trending": 9,
+            "novelty": 8,
+            "reason": "Major release announcement",
+        }
+    )
     mock_llm = MockLLMClient(json_response=json_response)
     processor = WeeklyDigestProcessor(llm_client=mock_llm)
 
@@ -144,7 +146,7 @@ async def test_generate_article_summaries_with_existing_japanese_summary():
         {
             "title": "Test Article",
             "summary": "English summary",
-            "japanese_summary": "既存の日本語要約"
+            "japanese_summary": "既存の日本語要約",
         }
     ]
 
@@ -170,29 +172,29 @@ async def test_generate_article_summaries_empty_list():
 @pytest.mark.asyncio
 async def test_process_full_pipeline(sample_articles):
     """全パイプラインの統合テスト"""
-    score_response = json.dumps({
-        "technical_impact": 8,
-        "industry_impact": 7,
-        "trending": 8,
-        "novelty": 7,
-        "reason": "Significant update"
-    })
+    score_response = json.dumps(
+        {
+            "technical_impact": 8,
+            "industry_impact": 7,
+            "trending": 8,
+            "novelty": 7,
+            "reason": "Significant update",
+        }
+    )
     summary_response = "今週はAI分野で重要な発表がありました。"
 
     mock_llm = MockLLMClient(
-        chat_response=summary_response,
-        json_response=score_response
+        chat_response=summary_response, json_response=score_response
     )
     mock_embedding = MockEmbeddingClient()
     processor = WeeklyDigestProcessor(
-        llm_client=mock_llm,
-        embedding_client=mock_embedding
+        llm_client=mock_llm, embedding_client=mock_embedding
     )
 
     result = await processor.process(
         articles=sample_articles,
         top_n=3,
-        deduplicate=False  # 重複除去なしでテスト
+        deduplicate=False,  # 重複除去なしでテスト
     )
 
     assert "trend_summary" in result
@@ -206,21 +208,20 @@ async def test_process_full_pipeline(sample_articles):
 async def test_processor_concurrent_limit():
     """並列処理の制限が機能していることを確認"""
     mock_llm = MockLLMClient(
-        json_response=json.dumps({
-            "technical_impact": 5,
-            "industry_impact": 5,
-            "trending": 5,
-            "novelty": 5,
-            "reason": "Test"
-        })
+        json_response=json.dumps(
+            {
+                "technical_impact": 5,
+                "industry_impact": 5,
+                "trending": 5,
+                "novelty": 5,
+                "reason": "Test",
+            }
+        )
     )
     processor = WeeklyDigestProcessor(llm_client=mock_llm, max_concurrent=2)
 
     # 10件の記事を処理
-    articles = [
-        {"title": f"Article {i}", "summary": f"Summary {i}"}
-        for i in range(10)
-    ]
+    articles = [{"title": f"Article {i}", "summary": f"Summary {i}"} for i in range(10)]
 
     result = await processor.rank_articles_by_importance(articles)
 
@@ -241,29 +242,31 @@ class TestBatchScoring:
     async def test_score_batch_success(self, sample_articles):
         """バッチスコアリングの正常系テスト"""
         # バッチ用JSONレスポンス（複数記事分）
-        batch_response = json.dumps([
-            {
-                "index": 0,
-                "technical_impact": 8,
-                "industry_impact": 7,
-                "trending": 9,
-                "novelty": 8,
-                "reason": "Major release"
-            },
-            {
-                "index": 1,
-                "technical_impact": 7,
-                "industry_impact": 6,
-                "trending": 8,
-                "novelty": 7,
-                "reason": "Significant update"
-            },
-        ])
+        batch_response = json.dumps(
+            [
+                {
+                    "index": 0,
+                    "technical_impact": 8,
+                    "industry_impact": 7,
+                    "trending": 9,
+                    "novelty": 8,
+                    "reason": "Major release",
+                },
+                {
+                    "index": 1,
+                    "technical_impact": 7,
+                    "industry_impact": 6,
+                    "trending": 8,
+                    "novelty": 7,
+                    "reason": "Significant update",
+                },
+            ]
+        )
         mock_llm = MockLLMClient(json_response=batch_response)
         processor = WeeklyDigestProcessor(llm_client=mock_llm, batch_size=20)
 
         # _score_batchメソッドが存在する場合のみテスト
-        if hasattr(processor, '_score_batch'):
+        if hasattr(processor, "_score_batch"):
             result = await processor._score_batch(sample_articles[:2])
             assert len(result) == 2
             assert all("importance_score" in article for article in result)
@@ -272,29 +275,32 @@ class TestBatchScoring:
     async def test_score_batch_json_parse_error_raises(self, sample_articles):
         """バッチJSONパースエラー時に例外が発生することを確認"""
         import json as json_module
+
         # 不正なJSONレスポンス
         mock_llm = MockLLMClient(json_response="invalid json for batch")
         processor = WeeklyDigestProcessor(llm_client=mock_llm, batch_size=20)
 
         # _score_batch は例外を上げる（フォールバックは rank_articles_by_importance で行う）
-        if hasattr(processor, '_score_batch'):
+        if hasattr(processor, "_score_batch"):
             with pytest.raises(json_module.JSONDecodeError):
                 await processor._score_batch(sample_articles[:2])
 
     @pytest.mark.asyncio
     async def test_batch_processing_in_rank_articles(self, sample_articles):
         """rank_articles_by_importanceでバッチ処理が動作することを確認"""
-        batch_response = json.dumps([
-            {
-                "index": i,
-                "technical_impact": 8,
-                "industry_impact": 7,
-                "trending": 8,
-                "novelty": 7,
-                "reason": f"Article {i} evaluation"
-            }
-            for i in range(len(sample_articles))
-        ])
+        batch_response = json.dumps(
+            [
+                {
+                    "index": i,
+                    "technical_impact": 8,
+                    "industry_impact": 7,
+                    "trending": 8,
+                    "novelty": 7,
+                    "reason": f"Article {i} evaluation",
+                }
+                for i in range(len(sample_articles))
+            ]
+        )
         mock_llm = MockLLMClient(json_response=batch_response)
         processor = WeeklyDigestProcessor(llm_client=mock_llm, batch_size=20)
 
@@ -306,24 +312,25 @@ class TestBatchScoring:
     @pytest.mark.asyncio
     async def test_batch_size_splitting(self):
         """バッチサイズに応じた分割テスト"""
-        batch_response = json.dumps([
-            {
-                "index": i,
-                "technical_impact": 7,
-                "industry_impact": 7,
-                "trending": 7,
-                "novelty": 7,
-                "reason": f"Test {i}"
-            }
-            for i in range(3)
-        ])
+        batch_response = json.dumps(
+            [
+                {
+                    "index": i,
+                    "technical_impact": 7,
+                    "industry_impact": 7,
+                    "trending": 7,
+                    "novelty": 7,
+                    "reason": f"Test {i}",
+                }
+                for i in range(3)
+            ]
+        )
         mock_llm = MockLLMClient(json_response=batch_response)
         processor = WeeklyDigestProcessor(llm_client=mock_llm, batch_size=3)
 
         # 10件の記事（3件バッチ×3 + 1件バッチ）
         articles = [
-            {"title": f"Article {i}", "summary": f"Summary {i}"}
-            for i in range(10)
+            {"title": f"Article {i}", "summary": f"Summary {i}"} for i in range(10)
         ]
 
         result = await processor.rank_articles_by_importance(articles)
@@ -334,18 +341,20 @@ class TestBatchScoring:
     @pytest.mark.asyncio
     async def test_score_single_fallback(self):
         """個別スコアリング（フォールバック）のテスト"""
-        single_response = json.dumps({
-            "technical_impact": 8,
-            "industry_impact": 7,
-            "trending": 9,
-            "novelty": 8,
-            "reason": "Important article"
-        })
+        single_response = json.dumps(
+            {
+                "technical_impact": 8,
+                "industry_impact": 7,
+                "trending": 9,
+                "novelty": 8,
+                "reason": "Important article",
+            }
+        )
         mock_llm = MockLLMClient(json_response=single_response)
         processor = WeeklyDigestProcessor(llm_client=mock_llm, batch_size=20)
 
         # _score_singleメソッドが存在する場合のみテスト
-        if hasattr(processor, '_score_single'):
+        if hasattr(processor, "_score_single"):
             article = {"title": "Test Article", "summary": "Test summary"}
             result = await processor._score_single(article)
             assert "importance_score" in result
@@ -359,8 +368,7 @@ class TestBatchScoring:
         processor = WeeklyDigestProcessor(llm_client=mock_llm, batch_size=20)
 
         articles = [
-            {"title": f"Article {i}", "summary": f"Summary {i}"}
-            for i in range(5)
+            {"title": f"Article {i}", "summary": f"Summary {i}"} for i in range(5)
         ]
 
         result = await processor.rank_articles_by_importance(articles)

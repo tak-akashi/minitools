@@ -10,6 +10,32 @@
   - 目的: Google Alerts専用であることを明確化
 
 ### Added
+- **Medium Claps数の出力**: NotionデータベースとSlack通知にClaps（拍手数）を追加
+  - Notion: `Claps` (Number型) プロパティとして保存、フィルタ・ソート可能
+  - Slack: 著者名の下に👏アイコン付きでカンマ区切り表示（0の場合は非表示）
+  - Article dataclass: `claps: int = 0` フィールド追加
+- **全文翻訳済みチェックボックス**: 全文翻訳成功時にNotionページの`Translated` (Checkbox型) を自動チェック
+  - `scripts/medium.py --translate` 経由の翻訳に対応
+  - `scripts/medium_translate.py` 経由の翻訳に対応
+  - NotionPublisher拡張: `update_page_properties()` メソッド追加
+- **Mediumコマンドオプション拡張**: `--translate`（claps閾値以上の記事を全文翻訳）、`--cdp`（CDP接続でCloudflare回避）オプション追加
+  - 設定項目: `defaults.medium.translate_clap_threshold`, `defaults.medium.translate_provider`, `defaults.medium.translate_model`
+
+- **Medium全文翻訳機能**: Medium記事の全文をPlaywrightで取得し、LLMで日本語翻訳してNotionに追記する機能
+  - 新規コンポーネント:
+    - `minitools/scrapers/medium_scraper.py` - MediumScraper（CDP/スタンドアロン、Cloudflare回避）
+    - `minitools/scrapers/markdown_converter.py` - MarkdownConverter（HTML→構造化Markdown変換）
+    - `minitools/processors/full_text_translator.py` - FullTextTranslator（チャンク分割翻訳・構造維持）
+    - `minitools/publishers/notion_block_builder.py` - NotionBlockBuilder（Markdown→Notionブロック変換）
+    - `minitools/llm/langchain_gemini.py` - LangChainGeminiClient（Gemini APIプロバイダー）
+    - `scripts/medium_translate.py` - CLIスクリプト
+  - NotionPublisher拡張: `find_page_by_url()`, `append_blocks()` メソッド（100ブロックバッチ対応）
+  - LLMファクトリ拡張: `get_llm_client(provider="gemini")` サポート
+  - `medium` コマンドに `--translate`, `--cdp` オプション追加
+  - 新規CLIコマンド: `medium-translate`
+  - 新規環境変数: `GEMINI_API_KEY`
+  - 設定項目: `defaults.medium.translate_clap_threshold`, `defaults.medium.translate_provider`, `defaults.medium.translate_model`
+
 - **バッチスコアリング機能**: `WeeklyDigestProcessor` と `ArxivWeeklyProcessor` にバッチ処理を導入し、スコアリング処理を高速化
   - 20件を1回のLLM呼び出しでまとめてスコアリング（約8倍の速度向上）
   - デフォルトプロバイダーをOpenAIに変更（`defaults.weekly_digest.provider`, `defaults.arxiv_weekly.provider`）

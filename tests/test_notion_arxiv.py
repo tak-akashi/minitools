@@ -27,7 +27,10 @@ class TestNotionReaderArxiv:
                             "type": "rich_text",
                             "rich_text": [{"plain_text": "テスト論文1の概要"}],
                         },
-                        "URL": {"type": "url", "url": "https://arxiv.org/abs/2601.00001"},
+                        "URL": {
+                            "type": "url",
+                            "url": "https://arxiv.org/abs/2601.00001",
+                        },
                     },
                 },
                 {
@@ -42,7 +45,10 @@ class TestNotionReaderArxiv:
                             "type": "rich_text",
                             "rich_text": [{"plain_text": "テスト論文2の概要"}],
                         },
-                        "URL": {"type": "url", "url": "https://arxiv.org/abs/2601.00002"},
+                        "URL": {
+                            "type": "url",
+                            "url": "https://arxiv.org/abs/2601.00002",
+                        },
                     },
                 },
             ],
@@ -50,7 +56,13 @@ class TestNotionReaderArxiv:
             "next_cursor": None,
         }
 
-        with patch.dict("os.environ", {"NOTION_API_KEY": "test-api-key", "NOTION_ARXIV_DATABASE_ID": "test-db-id"}):
+        with patch.dict(
+            "os.environ",
+            {
+                "NOTION_API_KEY": "test-api-key",
+                "NOTION_ARXIV_DATABASE_ID": "test-db-id",
+            },
+        ):
             with patch("minitools.readers.notion.Client") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.databases.query.return_value = mock_response
@@ -77,7 +89,13 @@ class TestNotionReaderArxiv:
             "next_cursor": None,
         }
 
-        with patch.dict("os.environ", {"NOTION_API_KEY": "test-api-key", "NOTION_ARXIV_DATABASE_ID": "test-db-id"}):
+        with patch.dict(
+            "os.environ",
+            {
+                "NOTION_API_KEY": "test-api-key",
+                "NOTION_ARXIV_DATABASE_ID": "test-db-id",
+            },
+        ):
             with patch("minitools.readers.notion.Client") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.databases.query.return_value = mock_response
@@ -102,7 +120,13 @@ class TestNotionReaderArxiv:
             "next_cursor": None,
         }
 
-        with patch.dict("os.environ", {"NOTION_API_KEY": "test-api-key", "NOTION_ARXIV_DATABASE_ID": "test-db-id"}):
+        with patch.dict(
+            "os.environ",
+            {
+                "NOTION_API_KEY": "test-api-key",
+                "NOTION_ARXIV_DATABASE_ID": "test-db-id",
+            },
+        ):
             with patch("minitools.readers.notion.Client") as mock_client_class:
                 mock_client = MagicMock()
                 mock_client.databases.query.return_value = mock_response

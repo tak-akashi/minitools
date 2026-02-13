@@ -41,7 +41,12 @@ class TestArxivWeeklyProcessor:
         """テスト用のトレンド情報"""
         return {
             "summary": "2026年のAIトレンドでは、エージェントシステムとマルチモーダルモデルが注目されている。",
-            "topics": ["AI Agents", "Multimodal Models", "Efficient Training", "Safety"],
+            "topics": [
+                "AI Agents",
+                "Multimodal Models",
+                "Efficient Training",
+                "Safety",
+            ],
             "sources": [
                 {"title": "AI Trends 2026", "url": "https://example.com/trends"},
             ],
@@ -332,17 +337,19 @@ class TestArxivBatchScoring:
         """トレンドありバッチスコアリングのテスト"""
         from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
 
-        batch_response = json.dumps([
-            {
-                "index": i,
-                "technical_novelty": 8,
-                "industry_impact": 7,
-                "practicality": 9,
-                "trend_relevance": 8,
-                "reason": f"Paper {i} is highly relevant"
-            }
-            for i in range(len(sample_papers))
-        ])
+        batch_response = json.dumps(
+            [
+                {
+                    "index": i,
+                    "technical_novelty": 8,
+                    "industry_impact": 7,
+                    "practicality": 9,
+                    "trend_relevance": 8,
+                    "reason": f"Paper {i} is highly relevant",
+                }
+                for i in range(len(sample_papers))
+            ]
+        )
         mock_llm = MockLLMClient(json_response=batch_response)
         processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
 
@@ -358,16 +365,18 @@ class TestArxivBatchScoring:
         """トレンドなしバッチスコアリングのテスト"""
         from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
 
-        batch_response = json.dumps([
-            {
-                "index": i,
-                "technical_novelty": 8,
-                "industry_impact": 7,
-                "practicality": 9,
-                "reason": f"Paper {i} evaluation"
-            }
-            for i in range(len(sample_papers))
-        ])
+        batch_response = json.dumps(
+            [
+                {
+                    "index": i,
+                    "technical_novelty": 8,
+                    "industry_impact": 7,
+                    "practicality": 9,
+                    "reason": f"Paper {i} evaluation",
+                }
+                for i in range(len(sample_papers))
+            ]
+        )
         mock_llm = MockLLMClient(json_response=batch_response)
         processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
 
@@ -395,17 +404,19 @@ class TestArxivBatchScoring:
         """_score_singleメソッドのテスト"""
         from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
 
-        single_response = json.dumps({
-            "technical_novelty": 8,
-            "industry_impact": 7,
-            "practicality": 9,
-            "reason": "Excellent paper"
-        })
+        single_response = json.dumps(
+            {
+                "technical_novelty": 8,
+                "industry_impact": 7,
+                "practicality": 9,
+                "reason": "Excellent paper",
+            }
+        )
         mock_llm = MockLLMClient(json_response=single_response)
         processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=20)
 
         # _score_singleメソッドが存在する場合のみテスト
-        if hasattr(processor, '_score_single'):
+        if hasattr(processor, "_score_single"):
             result = await processor._score_single(sample_papers[0], trends=None)
             assert "importance_score" in result
             # (8+7+9)/3 = 8.0
@@ -426,16 +437,18 @@ class TestArxivBatchScoring:
         """大量の論文がバッチ分割されることを確認"""
         from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
 
-        batch_response = json.dumps([
-            {
-                "index": i,
-                "technical_novelty": 7,
-                "industry_impact": 7,
-                "practicality": 7,
-                "reason": f"Paper {i}"
-            }
-            for i in range(5)
-        ])
+        batch_response = json.dumps(
+            [
+                {
+                    "index": i,
+                    "technical_novelty": 7,
+                    "industry_impact": 7,
+                    "practicality": 7,
+                    "reason": f"Paper {i}",
+                }
+                for i in range(5)
+            ]
+        )
         mock_llm = MockLLMClient(json_response=batch_response)
         processor = ArxivWeeklyProcessor(llm_client=mock_llm, batch_size=5)
 

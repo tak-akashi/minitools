@@ -127,9 +127,7 @@ class WeeklyDigestProcessor:
         self.similarity_threshold = config.get(
             "weekly_digest.deduplication.similarity_threshold", 0.85
         )
-        self.buffer_ratio = config.get(
-            "weekly_digest.deduplication.buffer_ratio", 2.5
-        )
+        self.buffer_ratio = config.get("weekly_digest.deduplication.buffer_ratio", 2.5)
         logger.info(
             f"WeeklyDigestProcessor initialized "
             f"(max_concurrent={self.max_concurrent}, "
@@ -212,7 +210,9 @@ class WeeklyDigestProcessor:
             article["score_reason"] = result.get("reason", "")
             article["score_details"] = result
 
-            logger.debug(f"Scored (single) '{title[:40]}...': {article['importance_score']}")
+            logger.debug(
+                f"Scored (single) '{title[:40]}...': {article['importance_score']}"
+            )
 
         except (json.JSONDecodeError, LLMError, TypeError, ValueError) as e:
             logger.warning(
@@ -260,9 +260,7 @@ class WeeklyDigestProcessor:
 
         # LLM呼び出し
         if hasattr(self.llm, "chat_json"):
-            response = await self.llm.chat_json(
-                [{"role": "user", "content": prompt}]
-            )
+            response = await self.llm.chat_json([{"role": "user", "content": prompt}])
         else:
             response = await self.llm.generate(prompt)
 
@@ -275,7 +273,9 @@ class WeeklyDigestProcessor:
         elif isinstance(parsed, list):
             results = parsed
         else:
-            raise json.JSONDecodeError("Expected JSON object with 'results' key or JSON array", response, 0)
+            raise json.JSONDecodeError(
+                "Expected JSON object with 'results' key or JSON array", response, 0
+            )
 
         if not isinstance(results, list):
             raise json.JSONDecodeError("Expected results to be a list", response, 0)
@@ -300,7 +300,9 @@ class WeeklyDigestProcessor:
                 article["score_reason"] = result.get("reason", "")
                 article["score_details"] = result
 
-                logger.debug(f"Scored (batch) '{title[:40]}...': {article['importance_score']}")
+                logger.debug(
+                    f"Scored (batch) '{title[:40]}...': {article['importance_score']}"
+                )
             else:
                 # indexが見つからない場合はデフォルトスコア
                 logger.warning(f"Missing score for index {i}, using default")
@@ -370,9 +372,7 @@ class WeeklyDigestProcessor:
                     return results
 
         # 全バッチを並列処理
-        tasks = [
-            process_batch(batch, idx) for idx, batch in enumerate(batches)
-        ]
+        tasks = [process_batch(batch, idx) for idx, batch in enumerate(batches)]
         batch_results = await asyncio.gather(*tasks)
 
         # バッチ結果を平坦化

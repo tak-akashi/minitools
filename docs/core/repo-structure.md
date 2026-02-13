@@ -21,23 +21,30 @@ minitools/
 │   │   ├── ollama_client.py       # Ollama APIクライアント（ネイティブ）
 │   │   ├── openai_client.py       # OpenAI APIクライアント（ネイティブ）
 │   │   ├── langchain_ollama.py    # LangChain Ollamaクライアント
-│   │   └── langchain_openai.py    # LangChain OpenAIクライアント
+│   │   ├── langchain_openai.py    # LangChain OpenAIクライアント
+│   │   └── langchain_gemini.py    # LangChain Geminiクライアント
 │   ├── readers/                    # 読み取りレイヤー
 │   │   ├── __init__.py
 │   │   └── notion.py              # Notionデータベース読み取り
 │   ├── researchers/                # リサーチレイヤー
 │   │   ├── __init__.py
 │   │   └── trend.py               # Tavily APIでトレンド調査
+│   ├── scrapers/                   # スクレイピングレイヤー
+│   │   ├── __init__.py
+│   │   ├── medium_scraper.py      # Playwright Medium記事取得（CDP/スタンドアロン）
+│   │   └── markdown_converter.py  # HTML→Markdown変換
 │   ├── processors/                 # コンテンツ処理レイヤー
 │   │   ├── __init__.py
 │   │   ├── translator.py          # Ollama翻訳
 │   │   ├── summarizer.py          # Ollama要約
+│   │   ├── full_text_translator.py # 全文翻訳（チャンク分割・構造維持）
 │   │   ├── weekly_digest.py       # 週次ダイジェスト生成
 │   │   ├── arxiv_weekly.py        # ArXiv週次ダイジェスト生成
 │   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/                 # 出力レイヤー
 │   │   ├── __init__.py
 │   │   ├── notion.py              # Notionデータベース連携
+│   │   ├── notion_block_builder.py # Markdown→Notionブロック変換
 │   │   └── slack.py               # Slack通知
 │   └── utils/                      # ユーティリティ
 │       ├── __init__.py
@@ -47,18 +54,35 @@ minitools/
 ├── scripts/                        # CLIエントリーポイント
 │   ├── arxiv.py                   # arxiv コマンド
 │   ├── medium.py                  # medium コマンド
+│   ├── medium_translate.py        # medium-translate コマンド
 │   ├── google_alerts.py           # google-alerts コマンド
 │   ├── youtube.py                 # youtube コマンド
 │   ├── google_alert_weekly_digest.py  # google-alert-weekly-digest コマンド
 │   └── arxiv_weekly.py            # arxiv-weekly コマンド
 │
 ├── docs/                           # ドキュメント
-│   ├── generated/                 # 生成ドキュメント
+│   ├── core/                      # コアドキュメント
 │   └── ideas/                     # アイデア・ブレインストーム
 │
 ├── outputs/                        # 実行時出力
 │   ├── logs/                      # ログファイル
 │   └── temp/                      # 一時ファイル
+│
+├── tests/                         # テスト
+│   ├── __init__.py
+│   ├── conftest.py               # テスト共通フィクスチャ
+│   ├── test_arxiv_weekly.py      # ArXiv週次ダイジェストテスト
+│   ├── test_duplicate_detector.py # 重複検出テスト
+│   ├── test_full_text_translator.py # 全文翻訳テスト
+│   ├── test_markdown_converter.py # Markdown変換テスト
+│   ├── test_medium_collector.py  # Medium収集テスト
+│   ├── test_medium_scraper.py    # Mediumスクレイパーテスト
+│   ├── test_notion_arxiv.py      # Notion ArXivテスト
+│   ├── test_notion_block_builder.py # Notionブロックビルダーテスト
+│   ├── test_notion_publisher.py  # Notionパブリッシャーテスト
+│   ├── test_slack_arxiv_format.py # Slack ArXivフォーマットテスト
+│   ├── test_trend_researcher.py  # トレンドリサーチテスト
+│   └── test_weekly_digest.py     # 週次ダイジェストテスト
 │
 ├── pyproject.toml                 # プロジェクト設定・依存関係
 ├── settings.yaml.example          # 設定ファイルテンプレート
@@ -105,6 +129,7 @@ Ollama/OpenAIを統一的に扱うための抽象化レイヤー。
 | `openai_client.py` | OpenAIクライアント実装（ネイティブ） | AsyncOpenAIを使用 |
 | `langchain_ollama.py` | LangChain Ollamaクライアント | LangChain経由でOllamaを使用（推奨） |
 | `langchain_openai.py` | LangChain OpenAIクライアント | LangChain経由でOpenAIを使用（推奨） |
+| `langchain_gemini.py` | LangChain Geminiクライアント | LangChain経由でGemini APIを使用 |
 | `__init__.py` | get_llm_client()ファクトリ | LangChain優先、ネイティブにフォールバック |
 
 #### readers/ (データ読み取り)
@@ -123,6 +148,15 @@ Ollama/OpenAIを統一的に扱うための抽象化レイヤー。
 |-----------|------|------------|
 | `trend.py` | AI/機械学習分野のトレンド調査 | Tavily API |
 
+#### scrapers/ (スクレイピング)
+
+Playwrightを使用して外部サイトからコンテンツを取得し、構造化データに変換するモジュール群。
+
+| モジュール | 役割 | 外部サービス |
+|-----------|------|------------|
+| `medium_scraper.py` | Playwright経由でMedium記事の全文HTMLを取得 | Playwright (CDP/スタンドアロン) |
+| `markdown_converter.py` | Medium記事HTMLを構造化Markdownに変換 | BeautifulSoup4 |
+
 #### processors/ (コンテンツ処理)
 
 LLMを使用してコンテンツを処理するモジュール群。
@@ -131,6 +165,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 |-----------|------|----------|
 | `translator.py` | テキストの日本語翻訳 | gemma3:27b (Ollama) |
 | `summarizer.py` | テキストの要約・キーポイント抽出 | gemma3:27b (Ollama) |
+| `full_text_translator.py` | 記事全文の日本語翻訳（チャンク分割・構造維持） | LLM抽象化レイヤー経由 |
 | `weekly_digest.py` | 週次ダイジェスト生成 | LLM抽象化レイヤー経由 |
 | `arxiv_weekly.py` | ArXiv週次ダイジェスト生成 | LLM抽象化レイヤー経由 |
 | `duplicate_detector.py` | 類似記事検出・重複除去 | Embedding抽象化レイヤー経由 |
@@ -141,7 +176,8 @@ LLMを使用してコンテンツを処理するモジュール群。
 
 | モジュール | 役割 | 外部サービス |
 |-----------|------|------------|
-| `notion.py` | Notionデータベースへの保存 | Notion API |
+| `notion.py` | Notionデータベースへの保存・ブロック追記 | Notion API |
+| `notion_block_builder.py` | MarkdownからNotionブロック形式への変換 | - |
 | `slack.py` | Slackチャンネルへの通知 | Slack Webhook |
 
 #### utils/ (ユーティリティ)
@@ -161,6 +197,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 |-----------|---------|-----|
 | `arxiv.py` | `arxiv` | ArXiv論文の検索・翻訳・保存 |
 | `medium.py` | `medium` | Medium記事の収集・翻訳・保存 |
+| `medium_translate.py` | `medium-translate` | Medium記事の全文翻訳・Notion追記 |
 | `google_alerts.py` | `google-alerts` | Google Alertsの収集・翻訳・保存 |
 | `youtube.py` | `youtube` | YouTube動画の文字起こし・要約 |
 | `google_alert_weekly_digest.py` | `google-alert-weekly-digest` | Google Alerts週次ダイジェストの生成・Slack通知 |
@@ -314,6 +351,7 @@ api_key = Config.get_api_key('new_service')  # NEW_SERVICE_API_KEY を検索
 [project.scripts]
 arxiv = "scripts.arxiv:main"
 medium = "scripts.medium:main"
+medium-translate = "scripts.medium_translate:main"
 google-alerts = "scripts.google_alerts:main"
 youtube = "scripts.youtube:main"
 google-alert-weekly-digest = "scripts.google_alert_weekly_digest:main"

@@ -26,19 +26,27 @@ minitools/
 │   │   ├── base.py        # 基底クラス
 │   │   ├── embeddings.py  # Embedding抽象化
 │   │   ├── langchain_ollama.py  # LangChain Ollama
-│   │   └── langchain_openai.py  # LangChain OpenAI
+│   │   ├── langchain_openai.py  # LangChain OpenAI
+│   │   ├── langchain_gemini.py  # LangChain Gemini
+│   │   ├── ollama_client.py     # ネイティブOllamaクライアント
+│   │   └── openai_client.py     # ネイティブOpenAIクライアント
 │   ├── readers/           # データ読み取りモジュール
 │   │   └── notion.py      # Notionデータベース読み取り
 │   ├── researchers/       # リサーチモジュール
 │   │   └── trend.py       # Tavilyトレンド調査
+│   ├── scrapers/          # Webスクレイピングモジュール
+│   │   ├── medium_scraper.py    # Playwright記事取得
+│   │   └── markdown_converter.py  # HTML→Markdown変換
 │   ├── processors/        # データ処理モジュール
 │   │   ├── translator.py  # 翻訳処理
 │   │   ├── summarizer.py  # 要約処理
+│   │   ├── full_text_translator.py  # 全文翻訳
 │   │   ├── weekly_digest.py    # 週次ダイジェスト生成
 │   │   ├── arxiv_weekly.py     # ArXiv週次ダイジェスト
 │   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/        # 出力先モジュール
 │   │   ├── notion.py      # Notion連携
+│   │   ├── notion_block_builder.py  # Markdown→Notionブロック変換
 │   │   └── slack.py       # Slack連携
 │   └── utils/             # ユーティリティ
 │       ├── config.py      # 設定管理
@@ -276,7 +284,7 @@ uv add --dev pytest black ruff
 uv sync
 
 # スクリプトの実行（仮想環境を自動的に使用）
-uv run minitools-arxiv --keywords "machine learning"
+uv run arxiv --keywords "machine learning"
 
 # Pythonインタープリターの実行
 uv run python
@@ -328,6 +336,42 @@ uv run medium --date 2024-01-15
 
 # Notionのみに保存
 uv run medium --notion
+
+# 拍手数が閾値以上の記事を全文翻訳してNotionに追記
+uv run medium --translate --notion
+
+# CDPモード（Cloudflare回避、推奨）
+uv run medium --translate --cdp --notion
+```
+
+#### Medium記事全文翻訳
+```bash
+# 個別記事を翻訳してNotionに保存（CDPモード推奨）
+uv run medium-translate --url "https://medium.com/..." --cdp
+
+# 複数記事を一括翻訳
+uv run medium-translate --url "https://..." --url "https://..." --cdp
+
+# Geminiプロバイダーで高速翻訳（推奨）
+uv run medium-translate --url "https://..." --cdp --provider gemini
+
+# OpenAIプロバイダーで翻訳
+uv run medium-translate --url "https://..." --provider openai
+
+# プレビュー（Notionに保存しない）
+uv run medium-translate --url "https://..." --cdp --dry-run
+```
+
+**必要なセットアップ:**
+```bash
+# Playwrightのブラウザインストール
+playwright install chromium
+
+# CDPモード使用時: 初回のみChromeが自動起動し、手動でMediumにログインが必要
+# ログイン後のセッションは ~/.minitools/chrome-profile に保存される
+
+# .envに環境変数を追加
+GEMINI_API_KEY=your-gemini-api-key  # Geminiプロバイダー使用時
 ```
 
 #### Google Alerts
@@ -589,6 +633,10 @@ YouTube動画の音声を文字起こしし、要約を日本語で出力しま�
 - `Summary` (Rich Text): 日本語要約
 - `Date` (Date): 処理日付
 
+### Medium追加
+- `Claps` (Number): 拍手数
+- `Translated` (Checkbox): 全文翻訳済みフラグ
+
 ### Google Alerts追加
 - `Source` (Rich Text): ソース情報
 
@@ -654,10 +702,10 @@ ollama serve
 ### 開発環境のセットアップ
 ```bash
 # 開発用依存関係のインストール
-uv add --dev pytest black ruff mypy
+uv add --dev pytest ruff mypy
 
 # コードフォーマット
-uv run black minitools/
+uv run ruff format minitools/
 uv run ruff check minitools/
 
 # 型チェック
