@@ -4,7 +4,7 @@ Converts translated Markdown into Notion API block format.
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from minitools.utils.logger import get_logger
 
@@ -48,9 +48,8 @@ class NotionBlockBuilder:
 
             # コードブロック
             if line.strip().startswith("```"):
-                code_block, i = self._parse_code_block(lines, i)
-                if code_block:
-                    blocks.append(code_block)
+                code_blocks, i = self._parse_code_block(lines, i)
+                blocks.extend(code_blocks)
                 continue
 
             # 見出し
@@ -118,16 +117,18 @@ class NotionBlockBuilder:
 
     def _parse_code_block(
         self, lines: List[str], start: int
-    ) -> tuple[Optional[Dict[str, Any]], int]:
+    ) -> tuple[List[Dict[str, Any]], int]:
         """
         コードブロックを解析する
+
+        コードが2000文字を超える場合は複数のコードブロックに分割する。
 
         Args:
             lines: 全行のリスト
             start: コードブロック開始行のインデックス
 
         Returns:
-            (Notionブロック, 次の行のインデックス)のタプル
+            (Notionブロックのリスト, 次の行のインデックス)のタプル
         """
         first_line = lines[start].strip()
         # 言語を抽出
@@ -144,7 +145,34 @@ class NotionBlockBuilder:
             i += 1
 
         code = "\n".join(code_lines)
-        return self._build_code_block(code, language), i
+
+        # 2000文字以下ならそのまま1ブロック
+        if len(code) <= NOTION_TEXT_LIMIT:
+            return [self._build_code_block(code, language)], i
+
+        # 2000文字超の場合、行単位で分割して複数ブロックに
+        blocks: List[Dict[str, Any]] = []
+        current_lines: List[str] = []
+        current_len = 0
+
+        for code_line in code_lines:
+            # +1 は改行文字分
+            line_len = len(code_line) + (1 if current_lines else 0)
+            if current_len + line_len > NOTION_TEXT_LIMIT and current_lines:
+                blocks.append(
+                    self._build_code_block("\n".join(current_lines), language)
+                )
+                current_lines = []
+                current_len = 0
+            current_lines.append(code_line)
+            current_len += line_len
+
+        if current_lines:
+            blocks.append(
+                self._build_code_block("\n".join(current_lines), language)
+            )
+
+        return blocks, i
 
     # Markdownインライン書式のパターン
     _INLINE_PATTERN = re.compile(
@@ -191,15 +219,22 @@ class NotionBlockBuilder:
                 )
             elif match.group(2) is not None:
                 # link: [text](url)
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": {
-                            "content": match.group(2),
-                            "link": {"url": match.group(3)},
-                        },
-                    }
-                )
+                link_url = match.group(3)
+                if link_url.startswith(("http://", "https://")):
+                    parts.append(
+                        {
+                            "type": "text",
+                            "text": {
+                                "content": match.group(2),
+                                "link": {"url": link_url},
+                            },
+                        }
+                    )
+                else:
+                    # 不正なURL（相対パス、アンカー等）はプレーンテキストにフォールバック
+                    parts.extend(
+                        self._build_plain_rich_text(match.group(2))
+                    )
             elif match.group(4) is not None:
                 # bold: **text**
                 parts.append(
