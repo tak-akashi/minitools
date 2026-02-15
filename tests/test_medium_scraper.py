@@ -29,7 +29,6 @@ class TestMediumScraperInit:
         assert s._playwright is None
         assert s._browser is None
         assert s._context is None
-        assert s._page is None
         assert s._chrome_process is None
 
     def test_init_standalone_mode(self):
@@ -55,7 +54,6 @@ class TestMediumScraperContextManager:
         scraper._browser = mock_browser
         scraper._playwright = mock_playwright
         scraper._context = MagicMock()
-        scraper._page = MagicMock()
 
         await scraper.__aexit__(None, None, None)
 
@@ -63,7 +61,6 @@ class TestMediumScraperContextManager:
         mock_playwright.stop.assert_awaited_once()
         assert scraper._browser is None
         assert scraper._context is None
-        assert scraper._page is None
 
     @pytest.mark.asyncio
     async def test_aexit_cdp_cleanup(self, cdp_scraper):
@@ -73,7 +70,6 @@ class TestMediumScraperContextManager:
         cdp_scraper._browser = mock_browser
         cdp_scraper._playwright = mock_playwright
         cdp_scraper._context = MagicMock()
-        cdp_scraper._page = MagicMock()
 
         await cdp_scraper.__aexit__(None, None, None)
 
@@ -81,7 +77,6 @@ class TestMediumScraperContextManager:
         mock_playwright.stop.assert_awaited_once()
         assert cdp_scraper._browser is None
         assert cdp_scraper._context is None
-        assert cdp_scraper._page is None
 
     @pytest.mark.asyncio
     async def test_aexit_without_browser(self, scraper):
@@ -91,7 +86,6 @@ class TestMediumScraperContextManager:
 
         await scraper.__aexit__(None, None, None)
         assert scraper._browser is None
-        assert scraper._page is None
 
 
 class TestMediumScraperScrapeArticle:
@@ -115,7 +109,11 @@ class TestMediumScraperScrapeArticle:
 
         mock_page.query_selector = AsyncMock(side_effect=query_selector)
         mock_page.title.return_value = "Test Article - Medium"
-        scraper._page = mock_page
+        mock_page.close = AsyncMock()
+
+        mock_context = MagicMock()
+        mock_context.new_page = AsyncMock(return_value=mock_page)
+        scraper._context = mock_context
 
         result = await scraper.scrape_article("https://medium.com/test-article")
 
@@ -123,6 +121,7 @@ class TestMediumScraperScrapeArticle:
         assert "<h1>Test</h1>" in result
         mock_page.goto.assert_awaited_once()
         mock_article.evaluate.assert_awaited_once_with("el => el.outerHTML")
+        mock_page.close.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_scrape_article_no_article_tag(self, scraper):
@@ -130,25 +129,35 @@ class TestMediumScraperScrapeArticle:
         mock_page = AsyncMock()
         mock_page.query_selector.return_value = None
         mock_page.title.return_value = "Some Page"
-        scraper._page = mock_page
+        mock_page.close = AsyncMock()
+
+        mock_context = MagicMock()
+        mock_context.new_page = AsyncMock(return_value=mock_page)
+        scraper._context = mock_context
 
         result = await scraper.scrape_article("https://medium.com/test")
         assert result == ""
+        mock_page.close.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_scrape_article_exception(self, scraper):
         """例外発生時は空文字列を返す"""
         mock_page = AsyncMock()
         mock_page.goto.side_effect = Exception("Network error")
-        scraper._page = mock_page
+        mock_page.close = AsyncMock()
+
+        mock_context = MagicMock()
+        mock_context.new_page = AsyncMock(return_value=mock_page)
+        scraper._context = mock_context
 
         result = await scraper.scrape_article("https://medium.com/test")
         assert result == ""
+        mock_page.close.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_scrape_article_no_page(self, scraper):
+    async def test_scrape_article_no_context(self, scraper):
         """ブラウザ未初期化時はRuntimeError"""
-        scraper._page = None
+        scraper._context = None
 
         with pytest.raises(RuntimeError, match="Browser not initialized"):
             await scraper.scrape_article("https://medium.com/test")
@@ -163,9 +172,8 @@ class TestMediumScraperCloudflareDetection:
         mock_page = AsyncMock()
         mock_page.title.return_value = "Just a moment..."
         mock_page.query_selector.return_value = None
-        scraper._page = mock_page
 
-        result = await scraper._is_cloudflare_challenge()
+        result = await scraper._is_cloudflare_challenge(mock_page)
         assert result is True
 
     @pytest.mark.asyncio
@@ -174,9 +182,8 @@ class TestMediumScraperCloudflareDetection:
         mock_page = AsyncMock()
         mock_page.title.return_value = "Loading..."
         mock_page.query_selector.return_value = MagicMock()
-        scraper._page = mock_page
 
-        result = await scraper._is_cloudflare_challenge()
+        result = await scraper._is_cloudflare_challenge(mock_page)
         assert result is True
 
     @pytest.mark.asyncio
@@ -185,9 +192,8 @@ class TestMediumScraperCloudflareDetection:
         mock_page = AsyncMock()
         mock_page.title.return_value = "My Article - Medium"
         mock_page.query_selector.return_value = None
-        scraper._page = mock_page
 
-        result = await scraper._is_cloudflare_challenge()
+        result = await scraper._is_cloudflare_challenge(mock_page)
         assert result is False
 
     @pytest.mark.asyncio
@@ -195,9 +201,8 @@ class TestMediumScraperCloudflareDetection:
         """例外発生時はFalse"""
         mock_page = AsyncMock()
         mock_page.title.side_effect = Exception("Page crashed")
-        scraper._page = mock_page
 
-        result = await scraper._is_cloudflare_challenge()
+        result = await scraper._is_cloudflare_challenge(mock_page)
         assert result is False
 
 
@@ -209,9 +214,8 @@ class TestMediumScraperErrorPageDetection:
         """タイトルに'404'がある場合にエラーページと判定"""
         mock_page = AsyncMock()
         mock_page.title.return_value = "404 - Page Not Found"
-        scraper._page = mock_page
 
-        result = await scraper._is_error_page()
+        result = await scraper._is_error_page(mock_page)
         assert result is True
 
     @pytest.mark.asyncio
@@ -219,9 +223,8 @@ class TestMediumScraperErrorPageDetection:
         """Mediumの404ページタイトル'out of the loop'を検出"""
         mock_page = AsyncMock()
         mock_page.title.return_value = "Out of the loop"
-        scraper._page = mock_page
 
-        result = await scraper._is_error_page()
+        result = await scraper._is_error_page(mock_page)
         assert result is True
 
     @pytest.mark.asyncio
@@ -232,9 +235,8 @@ class TestMediumScraperErrorPageDetection:
         mock_h1 = AsyncMock()
         mock_h1.inner_text.return_value = "404"
         mock_page.query_selector.return_value = mock_h1
-        scraper._page = mock_page
 
-        result = await scraper._is_error_page()
+        result = await scraper._is_error_page(mock_page)
         assert result is True
 
     @pytest.mark.asyncio
@@ -243,9 +245,8 @@ class TestMediumScraperErrorPageDetection:
         mock_page = AsyncMock()
         mock_page.title.return_value = "Great Article About AI - Medium"
         mock_page.query_selector.return_value = None
-        scraper._page = mock_page
 
-        result = await scraper._is_error_page()
+        result = await scraper._is_error_page(mock_page)
         assert result is False
 
     @pytest.mark.asyncio
@@ -253,9 +254,8 @@ class TestMediumScraperErrorPageDetection:
         """例外発生時はFalse"""
         mock_page = AsyncMock()
         mock_page.title.side_effect = Exception("Page crashed")
-        scraper._page = mock_page
 
-        result = await scraper._is_error_page()
+        result = await scraper._is_error_page(mock_page)
         assert result is False
 
 

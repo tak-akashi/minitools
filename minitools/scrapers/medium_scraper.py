@@ -75,7 +75,6 @@ class MediumScraper:
         self._playwright: Any = None
         self._browser: Any = None
         self._context: Any = None
-        self._page: Any = None
         self._chrome_process: Any = None
 
     async def __aenter__(self) -> "MediumScraper":
@@ -110,7 +109,6 @@ class MediumScraper:
             await self._playwright.stop()
         self._browser = None
         self._context = None
-        self._page = None
 
     async def _connect_cdp(self) -> None:
         """実際のChromeにCDP経由で接続する"""
@@ -137,8 +135,6 @@ class MediumScraper:
         else:
             self._context = await self._browser.new_context()
 
-        # 新しいタブで作業する
-        self._page = await self._context.new_page()
         logger.info("Connected to Chrome via CDP")
 
     async def _is_chrome_running(self) -> bool:
@@ -204,7 +200,6 @@ class MediumScraper:
             ),
             viewport={"width": 1920, "height": 1080},
         )
-        self._page = await self._context.new_page()
         logger.warning(
             "Using standalone Chromium. "
             "May be blocked by Cloudflare. Use --cdp for reliable access."
@@ -214,29 +209,33 @@ class MediumScraper:
         """
         記事URLから全文HTMLを取得する
 
+        毎回新しいページ（タブ）を作成し、完了後に閉じる。
+        これにより長時間の翻訳処理中にCDP接続がタイムアウトする問題を防ぐ。
+
         Args:
             url: Medium記事のURL
 
         Returns:
             記事のHTML文字列（取得失敗時は空文字列）
         """
-        if not self._page:
+        if not self._context:
             raise RuntimeError("Browser not initialized. Use 'async with' context.")
 
+        page = await self._context.new_page()
         try:
             logger.info(f"Scraping article: {url}")
 
-            await self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(random.uniform(2, 4))
 
             # Cloudflareチャレンジの検出
-            if await self._is_cloudflare_challenge():
+            if await self._is_cloudflare_challenge(page):
                 logger.warning(
                     "Cloudflare challenge detected, waiting for resolution..."
                 )
                 for _ in range(24):
                     await asyncio.sleep(5)
-                    if not await self._is_cloudflare_challenge():
+                    if not await self._is_cloudflare_challenge(page):
                         logger.info("Cloudflare challenge resolved")
                         await asyncio.sleep(2)
                         break
@@ -245,12 +244,12 @@ class MediumScraper:
                     return ""
 
             # エラーページの検出（404等）
-            if await self._is_error_page():
+            if await self._is_error_page(page):
                 logger.error(f"Error page detected for: {url}")
                 return ""
 
             # 記事本文のHTMLを取得
-            article_element = await self._page.query_selector("article")
+            article_element = await page.query_selector("article")
 
             if article_element:
                 html = await article_element.evaluate("el => el.outerHTML")
@@ -263,23 +262,25 @@ class MediumScraper:
         except Exception as e:
             logger.error(f"Article scraping failed for {url}: {e}")
             return ""
+        finally:
+            await page.close()
 
-    async def _is_cloudflare_challenge(self) -> bool:
+    async def _is_cloudflare_challenge(self, page: Any) -> bool:
         """現在のページがCloudflareチャレンジかどうかを判定"""
         try:
-            title = await self._page.title()
+            title = await page.title()
             if "just a moment" in title.lower():
                 return True
-            cf_element = await self._page.query_selector("#cf-challenge-running")
+            cf_element = await page.query_selector("#cf-challenge-running")
             return cf_element is not None
         except Exception:
             return False
 
-    async def _is_error_page(self) -> bool:
+    async def _is_error_page(self, page: Any) -> bool:
         """現在のページがエラーページ（404等）かどうかを判定"""
         try:
             # Medium固有の404ページ検出
-            title = await self._page.title()
+            title = await page.title()
             error_titles = [
                 "page not found",
                 "404",
@@ -291,7 +292,7 @@ class MediumScraper:
                 return True
 
             # HTTP status codeベースの検出（h1に"404"等がある場合）
-            h1 = await self._page.query_selector("h1")
+            h1 = await page.query_selector("h1")
             if h1:
                 h1_text = await h1.inner_text()
                 if "404" in h1_text or "not found" in h1_text.lower():
