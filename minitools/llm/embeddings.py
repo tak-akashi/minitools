@@ -197,12 +197,63 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
             raise EmbeddingError(f"OpenAI embedding failed: {e}") from e
 
 
+class GeminiEmbeddingClient(BaseEmbeddingClient):
+    """Gemini Embeddingクライアント（text-embedding-004使用）"""
+
+    def __init__(self, model: Optional[str] = None):
+        """
+        Args:
+            model: 使用するEmbeddingモデル名（省略時はtext-embedding-004）
+        """
+        self.model = model or "text-embedding-004"
+        self._embeddings = None
+        logger.debug(f"GeminiEmbeddingClient initialized with model: {self.model}")
+
+    def _get_embeddings(self):
+        """GoogleGenerativeAIEmbeddingsインスタンスを取得（遅延初期化）"""
+        if self._embeddings is None:
+            try:
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+                self._embeddings = GoogleGenerativeAIEmbeddings(
+                    model=f"models/{self.model}"
+                )
+            except ImportError as e:
+                raise EmbeddingError(
+                    f"langchain-google-genai is required for Gemini embeddings: {e}"
+                )
+        return self._embeddings
+
+    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+
+        try:
+            embeddings = self._get_embeddings()
+            result = await embeddings.aembed_documents(texts)
+            logger.debug(f"Generated {len(result)} embeddings via Gemini")
+            return result
+        except Exception as e:
+            logger.error(f"Gemini embedding error: {e}")
+            raise EmbeddingError(f"Gemini embedding failed: {e}") from e
+
+    async def embed_text(self, text: str) -> List[float]:
+        try:
+            embeddings = self._get_embeddings()
+            result = await embeddings.aembed_query(text)
+            logger.debug(f"Generated single embedding via Gemini (dim={len(result)})")
+            return result
+        except Exception as e:
+            logger.error(f"Gemini embedding error: {e}")
+            raise EmbeddingError(f"Gemini embedding failed: {e}") from e
+
+
 def get_embedding_client(provider: Optional[str] = None) -> BaseEmbeddingClient:
     """
     Embeddingクライアントを取得するファクトリ関数
 
     Args:
-        provider: プロバイダー名（"ollama" または "openai"）
+        provider: プロバイダー名（"ollama", "openai", "gemini"）
                   省略時は設定ファイルから取得
 
     Returns:
@@ -225,8 +276,10 @@ def get_embedding_client(provider: Optional[str] = None) -> BaseEmbeddingClient:
         return OllamaEmbeddingClient()
     elif use_provider == "openai":
         return OpenAIEmbeddingClient()
+    elif use_provider == "gemini":
+        return GeminiEmbeddingClient()
     else:
         raise ValueError(
             f"Unsupported embedding provider: {use_provider}. "
-            f"Supported providers: ollama, openai"
+            f"Supported providers: ollama, openai, gemini"
         )

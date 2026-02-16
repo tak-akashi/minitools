@@ -48,6 +48,8 @@ youtube = "scripts.youtube:main"
 google-alert-weekly-digest = "scripts.google_alert_weekly_digest:main"
 arxiv-weekly = "scripts.arxiv_weekly:main"
 medium-translate = "scripts.medium_translate:main"
+x-trend = "scripts.x_trend:main"
+x-followings = "scripts.x_followings:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -4,6 +4,32 @@
 
 ## [Unreleased]
 
+### Fixed
+- **XTrendCollector APIレスポンスパーシング修正**: TwitterAPI.ioのレスポンス構造がネスト形式（`{"status": "success", "data": {"tweets": [...]}}`）であることに対応
+  - `_parse_tweets()`: `data.data.tweets` のネスト構造に対応（従来は `data.tweets` のフラット構造のみ対応）
+  - `get_trends()`: 同様にネスト構造対応を追加
+  - テストのサンプルレスポンスを実際のAPI構造に合わせて更新
+
+### Added
+- **X (Twitter) AI トレンドダイジェスト v2**: キーワード検索とユーザータイムライン監視を追加し、3ソース構成に拡張
+  - 新規データクラス: `KeywordSearchResult`, `UserTimelineResult`, `CollectResult`, `KeywordSummary`, `TimelineSummary`, `ProcessResult`
+  - XTrendCollector拡張: `search_by_keyword()`, `get_user_timeline()`, `collect_keywords()`, `collect_timelines()`, `collect_all()`
+  - XTrendProcessor拡張: `filter_ai_tweets()`, `summarize_keyword_results()`, `summarize_timeline_results()`, `process_all()`
+  - SlackPublisher拡張: `format_x_trend_digest()` を `ProcessResult` 対応（3セクション構成: トレンド/キーワード/タイムライン）
+  - CLIオプション追加: `--no-trends`, `--no-keywords`, `--no-timeline`
+  - コスト最適化: トレンド名でLLMフィルタリング後にのみツイート取得（`fetch_tweets=False`）
+  - 設定項目追加: `x_trend.keywords`, `x_trend.watch_accounts`, `x_trend.tweets_per_keyword`, `x_trend.tweets_per_account`
+
+- **X (Twitter) AI トレンドダイジェスト v1**: TwitterAPI.ioからAI関連トレンドを収集・要約してSlackに送信する機能
+  - 新規コンポーネント:
+    - `minitools/collectors/x_trend.py` - XTrendCollector（トレンド取得、ツイート検索）
+    - `minitools/processors/x_trend.py` - XTrendProcessor（AI関連フィルタリング、要約生成）
+    - `scripts/x_trend.py` - CLIスクリプト
+  - SlackPublisher拡張: `format_x_trend_digest()`, 地域別2セクション構成
+  - 新規CLIコマンド: `x-trend`
+  - 新規環境変数: `TWITTER_API_IO_KEY`, `SLACK_X_TREND_WEBHOOK_URL`
+  - 設定項目: `defaults.x_trend.max_trends`, `defaults.x_trend.tweets_per_trend`, `defaults.x_trend.provider`
+
 ### Changed
 - **週次ダイジェストスクリプトのリネーム**: `scripts/weekly_digest.py` → `scripts/google_alert_weekly_digest.py`
   - CLIコマンド: `weekly-digest` → `google-alert-weekly-digest`

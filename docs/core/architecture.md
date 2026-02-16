@@ -13,6 +13,7 @@ flowchart TB
         Gmail["Gmail API"]
         YouTube["YouTube"]
         NotionDB["Notion Database"]
+        TwitterAPI["TwitterAPI.io"]
     end
 
     subgraph Collectors["収集レイヤー"]
@@ -20,6 +21,7 @@ flowchart TB
         MC["MediumCollector"]
         GAC["GoogleAlertsCollector"]
         YC["YouTubeCollector"]
+        XTC["XTrendCollector"]
     end
 
     subgraph Readers["読み取りレイヤー"]
@@ -48,6 +50,7 @@ flowchart TB
         FTT["FullTextTranslator"]
         WDP["WeeklyDigestProcessor"]
         AWP["ArxivWeeklyProcessor"]
+        XTP["XTrendProcessor"]
         DD["DuplicateDetector"]
     end
 
@@ -73,12 +76,14 @@ flowchart TB
     Gmail --> GAC
     YouTube --> YC
     NotionDB --> NR
+    TwitterAPI --> XTC
 
     AC --> TR
     MC --> TR
     GAC --> TR
     YC --> SU
     NR --> WDP
+    XTC --> XTP
 
     MS --> MDC
     MDC --> FTT
@@ -105,6 +110,7 @@ flowchart TB
     SU --> SP
     WDP --> SP
     AWP --> SP
+    XTP --> SP
 
     NP --> Notion
     SP --> Slack
@@ -122,6 +128,7 @@ flowchart TB
         youtube["youtube.py"]
         google_alert_weekly_digest["google_alert_weekly_digest.py"]
         arxiv_weekly["arxiv_weekly.py"]
+        x_trend["x_trend.py"]
     end
 
     subgraph collectors["minitools/collectors/"]
@@ -129,6 +136,7 @@ flowchart TB
         MC["MediumCollector"]
         GAC["GoogleAlertsCollector"]
         YC["YouTubeCollector"]
+        XTC["XTrendCollector"]
     end
 
     subgraph scrapers["minitools/scrapers/"]
@@ -142,6 +150,7 @@ flowchart TB
         FTT["FullTextTranslator"]
         WDP["WeeklyDigestProcessor"]
         AWP["ArxivWeeklyProcessor"]
+        XTP["XTrendProcessor"]
         DD["DuplicateDetector"]
     end
 
@@ -197,10 +206,15 @@ flowchart TB
     arxiv_weekly --> TrendR
     arxiv_weekly --> SP
 
+    x_trend --> XTC
+    x_trend --> XTP
+    x_trend --> SP
+
     AC --> Logger
     MC --> Logger
     GAC --> Logger
     YC --> Logger
+    XTC --> Logger
 
     TR --> Config
     TR --> Logger
@@ -209,6 +223,7 @@ flowchart TB
     WDP --> Config
     WDP --> Logger
     AWP --> Logger
+    XTP --> Logger
     TrendR --> Logger
     DD --> Logger
 
@@ -295,6 +310,35 @@ flowchart LR
     G --> H["Translator"]
     H --> I["日本語要約"]
     I --> J["ファイル保存"]
+```
+
+### X トレンド処理フロー（3ソース統合）
+
+```mermaid
+flowchart LR
+    subgraph Collect["XTrendCollector (並列収集)"]
+        T["トレンド取得\n(Japan/Global WOEID)"]
+        K["キーワード検索\n(settings.yaml)"]
+        U["ユーザーTL取得\n(settings.yaml)"]
+    end
+
+    subgraph Process["XTrendProcessor (LLM処理)"]
+        TF["トレンド名\nLLMフィルタ"]
+        TT["AI関連のみ\nツイート取得"]
+        TS["トレンド要約"]
+        KS["キーワード要約"]
+        UF["AI関連ツイート\nLLMフィルタ"]
+        US["タイムライン要約"]
+    end
+
+    T --> TF --> TT --> TS
+    K --> KS
+    U --> UF --> US
+
+    TS --> SP["SlackPublisher\nformat_x_trend_digest()"]
+    KS --> SP
+    US --> SP
+    SP --> Slack["Slack Channel"]
 ```
 
 ## 外部サービス連携
@@ -443,6 +487,29 @@ response = client.search(
 
 **必要な環境変数:**
 - `TAVILY_API_KEY`: Tavily APIキー（オプション、未設定時はトレンド調査をスキップ）
+
+### TwitterAPI.io
+
+X (Twitter) のトレンド取得、ツイート検索、ユーザータイムライン取得に使用。
+
+**エンドポイント:**
+- `GET /twitter/trends` — トレンド取得（WOEID指定）
+- `GET /twitter/tweet/advanced_search` — ツイート検索（トレンド名/キーワード）
+- `GET /twitter/user/last_tweets` — ユーザータイムライン取得
+
+**連携パターン:**
+```python
+async with XTrendCollector() as collector:
+    result = await collector.collect_all(
+        regions=["japan", "global"],
+        keywords=["Claude Code", "AI Agent"],
+        watch_accounts=["kaboratory"],
+    )
+```
+
+**必要な環境変数:**
+- `TWITTER_API_IO_KEY`: TwitterAPI.io APIキー
+- `SLACK_X_TIMELINE_SUMMARY_WEBHOOK_URL`: X トレンドダイジェスト用Slack Webhook URL
 
 ## 設定システム概要
 

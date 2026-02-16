@@ -656,3 +656,6 @@ token.pickle
 sandbox/
 temp/
 outputs/
+
+docs/ideas/
+docs/refs/

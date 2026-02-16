@@ -116,6 +116,21 @@ defaults:
       buffer_ratio: 2.5            # 候補記事の倍率（top_articles * buffer_ratio）
       embedding_model: "nomic-embed-text"  # Embeddingモデル
 
+  # X Trend Digest（Xトレンドダイジェスト）
+  x_trend:
+    max_trends: 10                   # 地域ごとの最大トレンド数
+    tweets_per_trend: 20             # トレンドあたりのツイート取得件数
+    tweets_per_keyword: 20           # キーワードあたりのツイート取得件数
+    tweets_per_account: 20           # アカウントあたりのツイート取得件数
+    provider: "gemini"               # デフォルトLLMプロバイダー
+    keywords:                        # キーワード検索リスト
+      - "Claude Code"
+      - "AI Agent"
+      - "LLM reasoning"
+    watch_accounts:                  # 監視アカウントリスト（@なしのユーザー名）
+      - "kaboratory"
+      - "svpino"
+
   # ArXiv Weekly Digest（ArXiv論文週次ダイジェスト）
   arxiv_weekly:
     days_back: 7                   # 過去何日分の論文を取得するか
