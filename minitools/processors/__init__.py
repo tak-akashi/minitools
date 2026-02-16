@@ -11,6 +11,7 @@ from minitools.processors.duplicate_detector import (
 )
 from minitools.processors.arxiv_weekly import ArxivWeeklyProcessor
 from minitools.processors.full_text_translator import FullTextTranslator
+from minitools.processors.x_trend import XTrendProcessor
 
 __all__ = [
     "Translator",
@@ -20,4 +21,5 @@ __all__ = [
     "deduplicate_articles",
     "ArxivWeeklyProcessor",
     "FullTextTranslator",
+    "XTrendProcessor",
 ]

@@ -21,7 +21,8 @@ minitools/
 │   │   ├── arxiv.py       # ArXiv論文収集
 │   │   ├── medium.py      # Medium Daily Digest収集
 │   │   ├── google_alerts.py  # Google Alerts収集
-│   │   └── youtube.py     # YouTube動画処理
+│   │   ├── youtube.py     # YouTube動画処理
+│   │   └── x_trend.py     # X トレンド収集（TwitterAPI.io）
 │   ├── llm/               # LLM抽象化レイヤー
 │   │   ├── base.py        # 基底クラス
 │   │   ├── embeddings.py  # Embedding抽象化
@@ -43,6 +44,7 @@ minitools/
 │   │   ├── full_text_translator.py  # 全文翻訳
 │   │   ├── weekly_digest.py    # 週次ダイジェスト生成
 │   │   ├── arxiv_weekly.py     # ArXiv週次ダイジェスト
+│   │   ├── x_trend.py         # X トレンド処理（LLMフィルタ・要約）
 │   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/        # 出力先モジュール
 │   │   ├── notion.py      # Notion連携
@@ -598,6 +600,39 @@ NotionのArXivデータベースから過去1週間の論文を取得し、AIが
 ```bash
 # 毎週月曜日10時に実行
 0 10 * * 1 cd /path/to/minitools && /path/to/uv run arxiv-weekly
+```
+
+### X (Twitter) AI トレンドダイジェスト
+
+X (Twitter) のトレンド、キーワード検索、フォロー中アカウントのタイムラインからAI関連情報を収集し、日本語要約をSlackに送信します。
+
+**特徴**:
+- 3ソース構成: トレンド（日本/グローバル）、キーワード検索、ユーザータイムライン監視
+- LLMによるAI関連フィルタリングと日本語要約
+- 3ソース並列収集で処理時間を最小化
+- コスト最適化: トレンド名でLLMフィルタリング後にのみツイート取得
+
+**オプション**:
+- `--dry-run`: Slack送信なしのプレビュー
+- `--region`: 地域指定（japan/global）
+- `--provider`: LLMプロバイダー（デフォルト: gemini）
+- `--test`: テストモード（最小件数で実行）
+- `--no-trends`: トレンド検索をスキップ
+- `--no-keywords`: キーワード検索をスキップ
+- `--no-timeline`: ユーザータイムライン監視をスキップ
+
+```bash
+# 基本使用
+uv run x-trend                    # デフォルト設定で実行
+uv run x-trend --dry-run          # プレビューモード
+uv run x-trend --region japan     # 日本トレンドのみ
+uv run x-trend --provider gemini  # Gemini APIを使用
+uv run x-trend --test             # テストモード
+
+# ソースの選択
+uv run x-trend --no-trends        # トレンド検索をスキップ
+uv run x-trend --no-keywords      # キーワード検索をスキップ
+uv run x-trend --no-timeline      # タイムライン監視をスキップ
 ```
 
 ### YouTube要約ツール

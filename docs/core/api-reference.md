@@ -346,6 +346,109 @@ print(result['transcript'])
 
 ---
 
+### XTrendCollector
+
+TwitterAPI.ioからX（Twitter）トレンド・キーワード検索・ユーザータイムラインを収集するクラス。日本/グローバルWOEIDのサポート、非同期HTTP通信、指数バックオフリトライ機能。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class Trend:
+    """トレンド情報"""
+    name: str                       # トレンド名
+    tweet_volume: int = 0           # ツイート数
+    region: str = ""                # "japan" or "global"
+
+@dataclass
+class Tweet:
+    """ツイート情報"""
+    text: str                       # ツイートテキスト
+    retweet_count: int = 0          # リツイート数
+    like_count: int = 0             # いいね数
+    author: str = ""                # 投稿者名
+
+@dataclass
+class TrendWithTweets:
+    """トレンドと関連ツイートのセット"""
+    trend: Trend
+    tweets: list[Tweet] = field(default_factory=list)
+
+@dataclass
+class KeywordSearchResult:
+    """キーワード検索結果"""
+    keyword: str
+    tweets: list[Tweet] = field(default_factory=list)
+
+@dataclass
+class UserTimelineResult:
+    """ユーザータイムライン結果"""
+    username: str
+    tweets: list[Tweet] = field(default_factory=list)
+
+@dataclass
+class CollectResult:
+    """全収集結果を格納"""
+    trends: dict[str, list[TrendWithTweets]] = field(default_factory=dict)
+    keyword_results: list[KeywordSearchResult] = field(default_factory=list)
+    timeline_results: list[UserTimelineResult] = field(default_factory=list)
+
+
+class XTrendCollector:
+    """TwitterAPI.ioを使用してトレンドとツイートを収集するクラス"""
+
+    def __init__(self, api_key: Optional[str] = None, max_retries: int = 3):
+        """
+        Args:
+            api_key: TwitterAPI.io APIキー（省略時は環境変数TWITTER_API_IO_KEYから取得）
+            max_retries: 最大リトライ回数
+        """
+
+    async def get_trends(self, woeid: int) -> list[Trend]:
+        """指定地域のトレンドを取得"""
+
+    async def get_tweets_for_trend(self, trend_name: str, count: int = 20) -> list[Tweet]:
+        """トレンドに関連するツイートを取得"""
+
+    async def search_by_keyword(self, keyword: str, count: int = 20) -> list[Tweet]:
+        """キーワードでツイートを検索"""
+
+    async def get_user_timeline(self, username: str, count: int = 20) -> list[Tweet]:
+        """ユーザーの最新ツイートを取得"""
+
+    async def collect_keywords(self, keywords: list[str], tweets_per_keyword: int = 20) -> list[KeywordSearchResult]:
+        """全キーワードでツイートを並列検索（Semaphore(5)）"""
+
+    async def collect_timelines(self, accounts: list[str], tweets_per_account: int = 20) -> list[UserTimelineResult]:
+        """全アカウントのタイムラインを並列取得（Semaphore(5)）"""
+
+    async def collect(self, regions: list[str] = None, tweets_per_trend: int = 20, fetch_tweets: bool = True) -> dict[str, list[TrendWithTweets]]:
+        """指定地域のトレンドと関連ツイートを収集（fetch_tweets=Falseでコスト最適化）"""
+
+    async def collect_all(self, regions=None, keywords=None, watch_accounts=None, ...) -> CollectResult:
+        """3ソース（トレンド・キーワード・タイムライン）を並列で収集"""
+```
+
+**使用例:**
+```python
+# 3ソース統合収集
+async with XTrendCollector() as collector:
+    result = await collector.collect_all(
+        regions=["japan", "global"],
+        keywords=["Claude Code", "AI Agent"],
+        watch_accounts=["kaboratory"],
+    )
+    print(f"Trends: {sum(len(v) for v in result.trends.values())}")
+    print(f"Keywords: {len(result.keyword_results)}")
+    print(f"Timelines: {len(result.timeline_results)}")
+
+# トレンドのみ（ツイート取得なし、コスト最適化）
+async with XTrendCollector() as collector:
+    trends = await collector.collect(fetch_tweets=False)
+```
+
+---
+
 ## LLM抽象化レイヤー
 
 ### BaseLLMClient
@@ -1467,6 +1570,93 @@ uv run arxiv-weekly --no-trends            # トレンド調査をスキップ
 
 ---
 
+### XTrendProcessor
+
+X トレンドデータをLLMで処理（AI関連フィルタリング、Tweet要約、キーワード・タイムライン処理）するプロセッサ。
+
+**ファイル:** `minitools/processors/x_trend.py`
+
+```python
+@dataclass
+class TrendSummary:
+    """トレンド要約"""
+    trend_name: str
+    topics: list[str]               # 話題の箇条書き（最大5件）
+    key_opinions: list[str]         # 主要意見（最大3件）
+    retweet_total: int = 0          # 合計リツイート数
+    region: str = ""                # "japan" or "global"
+
+@dataclass
+class KeywordSummary:
+    """キーワード検索要約"""
+    keyword: str
+    topics: list[str]
+    key_opinions: list[str]
+    retweet_total: int = 0
+
+@dataclass
+class TimelineSummary:
+    """タイムライン要約"""
+    username: str
+    topics: list[str]
+    key_opinions: list[str]
+    retweet_total: int = 0
+
+@dataclass
+class ProcessResult:
+    """全処理結果"""
+    trend_summaries: dict[str, list[TrendSummary]] = field(default_factory=dict)
+    keyword_summaries: list[KeywordSummary] = field(default_factory=list)
+    timeline_summaries: list[TimelineSummary] = field(default_factory=list)
+
+
+class XTrendProcessor:
+    """X トレンド処理プロセッサ"""
+
+    def __init__(self, llm_client: BaseLLMClient, max_concurrent: int = 3): ...
+
+    async def filter_ai_trends(self, trends: list[TrendWithTweets]) -> list[TrendWithTweets]:
+        """AI関連トレンドをLLMでバッチフィルタリング"""
+
+    async def summarize_trend(self, trend_with_tweets: TrendWithTweets) -> TrendSummary:
+        """トレンドのツイートを日本語で要約"""
+
+    async def filter_ai_tweets(self, tweets: list[Tweet]) -> list[Tweet]:
+        """AI関連ツイートをLLMでフィルタリング"""
+
+    async def summarize_keyword_results(self, results: list[KeywordSearchResult]) -> list[KeywordSummary]:
+        """キーワード検索結果を並列で要約"""
+
+    async def summarize_timeline_results(self, results: list[UserTimelineResult]) -> list[TimelineSummary]:
+        """タイムライン結果をフィルタリング後に要約"""
+
+    async def process_all(self, collect_result: CollectResult, max_trends: int, collector: XTrendCollector) -> ProcessResult:
+        """3ソースを統合処理（トレンド: フィルタ→ツイート取得→要約、キーワード: 要約、タイムライン: フィルタ→要約）"""
+```
+
+**使用例:**
+```python
+from minitools.llm import get_llm_client
+from minitools.processors.x_trend import XTrendProcessor
+
+llm = get_llm_client(provider="openai")
+processor = XTrendProcessor(llm_client=llm)
+
+# 3ソース統合処理
+async with XTrendCollector() as collector:
+    collect_result = await collector.collect_all(
+        regions=["japan"], keywords=["AI Agent"], watch_accounts=["kaboratory"]
+    )
+    process_result = await processor.process_all(
+        collect_result=collect_result, max_trends=10, collector=collector
+    )
+    print(f"Trends: {sum(len(v) for v in process_result.trend_summaries.values())}")
+    print(f"Keywords: {len(process_result.keyword_summaries)}")
+    print(f"Timelines: {len(process_result.timeline_summaries)}")
+```
+
+---
+
 ## Publishers
 
 ### NotionPublisher
@@ -1867,6 +2057,24 @@ class SlackPublisher:
         Returns:
             送信成功の場合True
         """
+
+    @staticmethod
+    def format_x_trend_digest(
+        process_result: Any,
+    ) -> str:
+        """
+        Xトレンドダイジェストを3セクション構成でフォーマット
+
+        ProcessResult（トレンド・キーワード・タイムライン）を受け取り、
+        3000文字以内のSlackメッセージにフォーマットします。
+        後方互換としてDict[str, List[TrendSummary]]も受け付けます。
+
+        Args:
+            process_result: ProcessResult または Dict[str, List[TrendSummary]]（後方互換）
+
+        Returns:
+            フォーマットされたメッセージ（3000文字以内）
+        """
 ```
 
 **使用例:**
@@ -1897,6 +2105,10 @@ async with SlackPublisher(webhook_url) as slack:
         papers=top_papers,
         trend_summary="今週のAIトレンド..."
     )
+
+    # X トレンドダイジェストの送信（ProcessResult対応）
+    message = SlackPublisher.format_x_trend_digest(process_result)
+    await slack.send_message(message)
 ```
 
 ---
@@ -2131,4 +2343,156 @@ class Alert:
     def __post_init__(self):
         if self.tags is None:
             self.tags = []
+```
+
+### Tweet
+
+ツイート情報を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class Tweet:
+    """ツイート情報"""
+    text: str                # ツイートテキスト
+    retweet_count: int = 0   # リツイート数
+    like_count: int = 0      # いいね数
+    author: str = ""         # 投稿者名
+```
+
+### Trend
+
+X トレンド情報を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class Trend:
+    """トレンド情報"""
+    name: str                # トレンド名
+    tweet_volume: int = 0    # ツイート数
+    region: str = ""         # "japan" or "global"
+```
+
+### TrendWithTweets
+
+トレンドと関連ツイートのセットを格納するデータクラス。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class TrendWithTweets:
+    """トレンドと関連ツイートのセット"""
+    trend: Trend
+    tweets: list[Tweet] = field(default_factory=list)
+```
+
+### KeywordSearchResult
+
+キーワード検索結果を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class KeywordSearchResult:
+    """キーワード検索結果"""
+    keyword: str
+    tweets: list[Tweet] = field(default_factory=list)
+```
+
+### UserTimelineResult
+
+ユーザータイムライン結果を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class UserTimelineResult:
+    """ユーザータイムライン結果"""
+    username: str
+    tweets: list[Tweet] = field(default_factory=list)
+```
+
+### CollectResult
+
+全収集結果を格納するデータクラス。
+
+**ファイル:** `minitools/collectors/x_trend.py`
+
+```python
+@dataclass
+class CollectResult:
+    """全収集結果を格納"""
+    trends: dict[str, list[TrendWithTweets]] = field(default_factory=dict)
+    keyword_results: list[KeywordSearchResult] = field(default_factory=list)
+    timeline_results: list[UserTimelineResult] = field(default_factory=list)
+```
+
+### TrendSummary
+
+トレンド要約情報を格納するデータクラス。
+
+**ファイル:** `minitools/processors/x_trend.py`
+
+```python
+@dataclass
+class TrendSummary:
+    """トレンド要約"""
+    trend_name: str
+    topics: list[str] = field(default_factory=list)       # 話題の箇条書き（最大5件）
+    key_opinions: list[str] = field(default_factory=list)  # 主要意見（最大3件）
+    retweet_total: int = 0   # RT数合計
+    region: str = ""         # "japan" or "global"
+```
+
+### KeywordSummary
+
+キーワード検索要約を格納するデータクラス。
+
+**ファイル:** `minitools/processors/x_trend.py`
+
+```python
+@dataclass
+class KeywordSummary:
+    """キーワード検索要約"""
+    keyword: str
+    topics: list[str] = field(default_factory=list)
+    key_opinions: list[str] = field(default_factory=list)
+    retweet_total: int = 0
+```
+
+### TimelineSummary
+
+ユーザータイムライン要約を格納するデータクラス。
+
+**ファイル:** `minitools/processors/x_trend.py`
+
+```python
+@dataclass
+class TimelineSummary:
+    """ユーザータイムライン要約"""
+    username: str
+    topics: list[str] = field(default_factory=list)
+    key_opinions: list[str] = field(default_factory=list)
+    retweet_total: int = 0
+```
+
+### ProcessResult
+
+全処理結果を格納するデータクラス。
+
+**ファイル:** `minitools/processors/x_trend.py`
+
+```python
+@dataclass
+class ProcessResult:
+    """全処理結果"""
+    trend_summaries: dict[str, list[TrendSummary]] = field(default_factory=dict)
+    keyword_summaries: list[KeywordSummary] = field(default_factory=list)
+    timeline_summaries: list[TimelineSummary] = field(default_factory=list)
 ```

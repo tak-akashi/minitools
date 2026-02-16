@@ -13,7 +13,8 @@ minitools/
 │   │   ├── arxiv.py               # ArXiv論文検索
 │   │   ├── medium.py              # Medium Daily Digest収集
 │   │   ├── google_alerts.py       # Google Alerts収集
-│   │   └── youtube.py             # YouTube文字起こし
+│   │   ├── youtube.py             # YouTube文字起こし
+│   │   └── x_trend.py             # X トレンド収集（TwitterAPI.io）
 │   ├── llm/                        # LLM抽象化レイヤー
 │   │   ├── __init__.py            # get_llm_client()ファクトリ
 │   │   ├── base.py                # BaseLLMClient抽象基底クラス
@@ -40,6 +41,7 @@ minitools/
 │   │   ├── full_text_translator.py # 全文翻訳（チャンク分割・構造維持）
 │   │   ├── weekly_digest.py       # 週次ダイジェスト生成
 │   │   ├── arxiv_weekly.py        # ArXiv週次ダイジェスト生成
+│   │   ├── x_trend.py             # X トレンド処理（LLMフィルタ・要約）
 │   │   └── duplicate_detector.py  # 類似記事検出
 │   ├── publishers/                 # 出力レイヤー
 │   │   ├── __init__.py
@@ -58,7 +60,8 @@ minitools/
 │   ├── google_alerts.py           # google-alerts コマンド
 │   ├── youtube.py                 # youtube コマンド
 │   ├── google_alert_weekly_digest.py  # google-alert-weekly-digest コマンド
-│   └── arxiv_weekly.py            # arxiv-weekly コマンド
+│   ├── arxiv_weekly.py            # arxiv-weekly コマンド
+│   └── x_trend.py                 # x-trend コマンド
 │
 ├── docs/                           # ドキュメント
 │   ├── core/                      # コアドキュメント
@@ -82,6 +85,9 @@ minitools/
 │   ├── test_notion_publisher.py  # Notionパブリッシャーテスト
 │   ├── test_slack_arxiv_format.py # Slack ArXivフォーマットテスト
 │   ├── test_trend_researcher.py  # トレンドリサーチテスト
+│   ├── test_slack_x_trend_format.py # X トレンドSlackフォーマットテスト
+│   ├── test_x_trend_collector.py # X トレンド収集テスト
+│   ├── test_x_trend_processor.py # X トレンド処理テスト
 │   └── test_weekly_digest.py     # 週次ダイジェストテスト
 │
 ├── pyproject.toml                 # プロジェクト設定・依存関係
@@ -116,6 +122,7 @@ minitools/
 | `medium.py` | Gmail経由でMedium Daily Digestを取得 | Gmail API, Jina AI Reader |
 | `google_alerts.py` | Gmail経由でGoogle Alertsを取得 | Gmail API |
 | `youtube.py` | YouTube動画の音声ダウンロード・文字起こし | yt-dlp, MLX Whisper |
+| `x_trend.py` | TwitterAPI.ioからトレンド・キーワード検索・ユーザータイムラインを収集 | TwitterAPI.io |
 
 #### llm/ (LLM抽象化レイヤー)
 
@@ -168,6 +175,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 | `full_text_translator.py` | 記事全文の日本語翻訳（チャンク分割・構造維持） | LLM抽象化レイヤー経由 |
 | `weekly_digest.py` | 週次ダイジェスト生成 | LLM抽象化レイヤー経由 |
 | `arxiv_weekly.py` | ArXiv週次ダイジェスト生成 | LLM抽象化レイヤー経由 |
+| `x_trend.py` | X トレンド処理・AI関連フィルタ・Tweet要約 | LLM抽象化レイヤー経由 |
 | `duplicate_detector.py` | 類似記事検出・重複除去 | Embedding抽象化レイヤー経由 |
 
 #### publishers/ (出力)
@@ -202,6 +210,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 | `youtube.py` | `youtube` | YouTube動画の文字起こし・要約 |
 | `google_alert_weekly_digest.py` | `google-alert-weekly-digest` | Google Alerts週次ダイジェストの生成・Slack通知 |
 | `arxiv_weekly.py` | `arxiv-weekly` | ArXiv週次ダイジェストの生成・Slack通知 |
+| `x_trend.py` | `x-trend` | X トレンドの収集・AI関連フィルタ・Slack通知 |
 
 ## 新規コンポーネント追加手順
 
@@ -356,6 +365,7 @@ google-alerts = "scripts.google_alerts:main"
 youtube = "scripts.youtube:main"
 google-alert-weekly-digest = "scripts.google_alert_weekly_digest:main"
 arxiv-weekly = "scripts.arxiv_weekly:main"
+x-trend = "scripts.x_trend:main"
 # 新規追加
 new-source = "scripts.new_source:main"
 ```

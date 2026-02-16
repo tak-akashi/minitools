@@ -2,8 +2,10 @@
 Slack publisher module for sending messages to Slack channels.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 
@@ -15,7 +17,7 @@ logger = get_logger(__name__)
 class SlackPublisher:
     """Slackにメッセージを送信するクラス"""
 
-    def __init__(self, webhook_url: Optional[str] = None):
+    def __init__(self, webhook_url: str | None = None):
         """
         Args:
             webhook_url: Slack Webhook URL（指定しない場合は環境変数から取得）
@@ -38,7 +40,7 @@ class SlackPublisher:
         self.webhook_url = webhook_url
 
     async def send_message(
-        self, message: str, webhook_url: Optional[str] = None
+        self, message: str, webhook_url: str | None = None
     ) -> bool:
         """
         Slackにメッセージを送信
@@ -78,8 +80,8 @@ class SlackPublisher:
 
     def format_articles_message(
         self,
-        articles: List[Dict[str, Any]],
-        date: Optional[str] = None,
+        articles: list[dict[str, Any]],
+        date: str | None = None,
         title: str = "Daily Digest",
     ) -> str:
         """
@@ -128,7 +130,7 @@ class SlackPublisher:
 
         return message
 
-    def format_simple_list(self, items: List[str], title: str = "通知") -> str:
+    def format_simple_list(self, items: list[str], title: str = "通知") -> str:
         """
         シンプルなリストをSlackメッセージ形式にフォーマット
 
@@ -150,9 +152,9 @@ class SlackPublisher:
 
     async def send_articles(
         self,
-        articles: List[Dict[str, Any]],
-        webhook_url: Optional[str] = None,
-        date: Optional[str] = None,
+        articles: list[dict[str, Any]],
+        webhook_url: str | None = None,
+        date: str | None = None,
         title: str = "Daily Digest",
     ) -> bool:
         """
@@ -175,7 +177,7 @@ class SlackPublisher:
         start_date: str,
         end_date: str,
         trend_summary: str,
-        articles: List[Dict[str, Any]],
+        articles: list[dict[str, Any]],
     ) -> str:
         """
         週次ダイジェストをSlackメッセージ形式にフォーマット
@@ -249,8 +251,8 @@ class SlackPublisher:
         self,
         start_date: str,
         end_date: str,
-        papers: List[Dict[str, Any]],
-        trend_summary: Optional[str] = None,
+        papers: list[dict[str, Any]],
+        trend_summary: str | None = None,
     ) -> str:
         """
         ArXiv週次ダイジェストをSlackメッセージ形式にフォーマット
@@ -353,9 +355,9 @@ class SlackPublisher:
         self,
         start_date: str,
         end_date: str,
-        papers: List[Dict[str, Any]],
-        trend_summary: Optional[str] = None,
-        webhook_url: Optional[str] = None,
+        papers: list[dict[str, Any]],
+        trend_summary: str | None = None,
+        webhook_url: str | None = None,
     ) -> bool:
         """
         ArXiv週次ダイジェストをフォーマットしてSlackに送信
@@ -373,13 +375,161 @@ class SlackPublisher:
         message = self.format_arxiv_weekly(start_date, end_date, papers, trend_summary)
         return await self.send_message(message, webhook_url)
 
+    @staticmethod
+    def _format_rt_count(rt: int) -> str:
+        """RT数をフォーマット"""
+        if rt >= 1000:
+            return f"{rt / 1000:.1f}K"
+        return str(rt)
+
+    @staticmethod
+    def _build_summary_entry(
+        index: int,
+        name: str,
+        topics: list[str],
+        rt: int,
+        opinions: list[str],
+    ) -> str:
+        """個別サマリーのエントリを構築"""
+        rt_str = SlackPublisher._format_rt_count(rt)
+        entry = f"{index}. *{name}*"
+        if rt > 0:
+            entry += f"  (🔄 {rt_str} RT)"
+        entry += "\n"
+
+        for topic in topics[:5]:
+            if len(topic) > 60:
+                topic = topic[:57] + "..."
+            entry += f"   • {topic}\n"
+
+        if opinions:
+            entry += "   💬 主要な反応:\n"
+            for opinion in opinions[:3]:
+                if len(opinion) > 60:
+                    opinion = opinion[:57] + "..."
+                entry += f"   • {opinion}\n"
+
+        entry += "\n"
+        return entry
+
+    @staticmethod
+    def format_x_trend_digest(
+        process_result: Any,
+    ) -> str:
+        """
+        Xトレンドダイジェストをフォーマット
+
+        Args:
+            process_result: ProcessResult または Dict[str, list[TrendSummary]]（後方互換）
+
+        Returns:
+            フォーマットされたメッセージ（3000文字以内）
+        """
+        from datetime import datetime as dt
+
+        date_str = dt.now().strftime("%Y-%m-%d")
+        message = f"🐦 *X AI トレンドダイジェスト ({date_str})*\n\n"
+
+        max_length = 3000
+
+        # ProcessResult or dict の判定
+        if hasattr(process_result, "trend_summaries"):
+            summaries_by_region = process_result.trend_summaries
+            keyword_summaries = process_result.keyword_summaries
+            timeline_summaries = process_result.timeline_summaries
+        else:
+            summaries_by_region = process_result
+            keyword_summaries = []
+            timeline_summaries = []
+
+        total_items = (
+            sum(len(v) for v in summaries_by_region.values())
+            + len(keyword_summaries)
+            + len(timeline_summaries)
+        )
+        if total_items == 0:
+            message += "AI関連のトレンドは見つかりませんでした。\n"
+            return message
+
+        # セクション1: トレンド（グローバル → 日本の順）
+        region_order = [
+            ("global", "🌏 グローバル AI トレンド"),
+            ("japan", "🇯🇵 日本 AI トレンド"),
+        ]
+
+        for region_key, section_header in region_order:
+            summaries = summaries_by_region.get(region_key, [])
+            if not summaries:
+                continue
+
+            section = f"*{section_header}*\n\n"
+
+            for i, summary in enumerate(summaries, 1):
+                rt = summary.retweet_total if hasattr(summary, "retweet_total") else 0
+                opinions = (
+                    summary.key_opinions if hasattr(summary, "key_opinions") else []
+                )
+                topics = summary.topics if hasattr(summary, "topics") else []
+                entry = SlackPublisher._build_summary_entry(
+                    i, summary.trend_name, topics, rt, opinions
+                )
+
+                if len(message) + len(section) + len(entry) > max_length:
+                    section += f"_（以降 {len(summaries) - i + 1} 件は省略）_\n"
+                    break
+
+                section += entry
+
+            message += section
+            message += "─" * 30 + "\n\n"
+
+        # セクション2: キーワード検索ハイライト
+        if keyword_summaries:
+            section = "*🔍 キーワード検索ハイライト*\n\n"
+
+            for i, ks in enumerate(keyword_summaries, 1):
+                entry = SlackPublisher._build_summary_entry(
+                    i, ks.keyword, ks.topics, ks.retweet_total, ks.key_opinions
+                )
+
+                if len(message) + len(section) + len(entry) > max_length:
+                    section += f"_（以降 {len(keyword_summaries) - i + 1} 件は省略）_\n"
+                    break
+
+                section += entry
+
+            message += section
+            message += "─" * 30 + "\n\n"
+
+        # セクション3: 注目アカウントの発信
+        if timeline_summaries:
+            section = "*👤 注目アカウントの発信*\n\n"
+
+            for i, ts in enumerate(timeline_summaries, 1):
+                entry = SlackPublisher._build_summary_entry(
+                    i, f"@{ts.username}", ts.topics, ts.retweet_total, ts.key_opinions
+                )
+
+                if len(message) + len(section) + len(entry) > max_length:
+                    section += (
+                        f"_（以降 {len(timeline_summaries) - i + 1} 件は省略）_\n"
+                    )
+                    break
+
+                section += entry
+
+            message += section
+            message += "─" * 30 + "\n\n"
+
+        return message.rstrip() + "\n"
+
     async def send_weekly_digest(
         self,
         start_date: str,
         end_date: str,
         trend_summary: str,
-        articles: List[Dict[str, Any]],
-        webhook_url: Optional[str] = None,
+        articles: list[dict[str, Any]],
+        webhook_url: str | None = None,
     ) -> bool:
         """
         週次ダイジェストをフォーマットしてSlackに送信
