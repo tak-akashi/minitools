@@ -1920,6 +1920,22 @@ class SlackPublisher:
             送信成功の場合True
         """
 
+    async def send_messages(
+        self,
+        messages: List[str],
+        webhook_url: Optional[str] = None
+    ) -> bool:
+        """
+        複数メッセージを順番にSlackに送信（0.5秒間隔）
+
+        Args:
+            messages: 送信するメッセージのリスト
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            全メッセージの送信成功の場合True
+        """
+
     def format_articles_message(
         self,
         articles: List[Dict[str, Any]],
@@ -2059,21 +2075,40 @@ class SlackPublisher:
         """
 
     @staticmethod
-    def format_x_trend_digest(
+    def format_x_trend_digest_sections(
         process_result: Any,
-    ) -> str:
+    ) -> List[str]:
         """
-        Xトレンドダイジェストを3セクション構成でフォーマット
+        Xトレンドダイジェストをセクションごとのメッセージリストとしてフォーマット
 
-        ProcessResult（トレンド・キーワード・タイムライン）を受け取り、
-        3000文字以内のSlackメッセージにフォーマットします。
-        後方互換としてDict[str, List[TrendSummary]]も受け付けます。
+        省略なしで全内容を含む。セクション構成:
+        - メッセージ1: ヘッダー + トレンド（グローバル＋日本）
+        - メッセージ2: キーワード検索ハイライト
+        - メッセージ3: 注目アカウントの発信
+        空のセクションはスキップされる。
 
         Args:
             process_result: ProcessResult または Dict[str, List[TrendSummary]]（後方互換）
 
         Returns:
-            フォーマットされたメッセージ（3000文字以内）
+            セクションごとのメッセージリスト
+        """
+
+    @staticmethod
+    def format_x_trend_digest(
+        process_result: Any,
+    ) -> str:
+        """
+        Xトレンドダイジェストをフォーマット（後方互換ラッパー）
+
+        内部でformat_x_trend_digest_sections()を呼び出し、
+        結果を改行で結合した文字列を返す。
+
+        Args:
+            process_result: ProcessResult または Dict[str, List[TrendSummary]]（後方互換）
+
+        Returns:
+            フォーマットされたメッセージ
         """
 ```
 
@@ -2106,7 +2141,11 @@ async with SlackPublisher(webhook_url) as slack:
         trend_summary="今週のAIトレンド..."
     )
 
-    # X トレンドダイジェストの送信（ProcessResult対応）
+    # X トレンドダイジェストの送信（セクション分割、省略なし）
+    messages = SlackPublisher.format_x_trend_digest_sections(process_result)
+    await slack.send_messages(messages)
+
+    # 後方互換: 単一文字列として取得
     message = SlackPublisher.format_x_trend_digest(process_result)
     await slack.send_message(message)
 ```

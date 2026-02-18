@@ -126,8 +126,8 @@ class TestFormatXTrendDigest:
         assert "日本 AI トレンド" in message
         assert "グローバル AI トレンド" not in message
 
-    def test_character_limit(self):
-        """3000文字制限テスト"""
+    def test_no_truncation(self):
+        """省略なしで全件出力されるテスト"""
         # 大量のトレンドを生成
         many_summaries = {
             "global": [
@@ -153,7 +153,11 @@ class TestFormatXTrendDigest:
         }
 
         message = SlackPublisher.format_x_trend_digest(many_summaries)
-        assert len(message) <= 3100  # some margin for trailing chars
+        # 省略されていないことを確認
+        assert "省略" not in message
+        # 全50件が含まれることを確認
+        assert "Very Long Trend Name 49" in message
+        assert "長いトレンド名 49" in message
 
     def test_key_opinions_included(self, sample_summaries):
         """主要意見が含まれるテスト"""
@@ -242,8 +246,8 @@ class TestFormatXTrendDigestProcessResult:
 
         assert "見つかりませんでした" in message
 
-    def test_three_section_character_limit(self):
-        """3セクション構成の3000文字制限テスト"""
+    def test_three_section_no_truncation(self):
+        """3セクション構成で省略なしのテスト"""
         result = ProcessResult(
             trend_summaries={
                 "global": [
@@ -278,4 +282,73 @@ class TestFormatXTrendDigestProcessResult:
         )
 
         message = SlackPublisher.format_x_trend_digest(result)
-        assert len(message) <= 3100
+        # 省略されていないことを確認
+        assert "省略" not in message
+        # 全件含まれていることを確認
+        assert "Trend 19" in message
+        assert "keyword_19" in message
+        assert "@user_19" in message
+
+
+class TestFormatXTrendDigestSections:
+    """format_x_trend_digest_sectionsのテスト"""
+
+    def test_returns_list(self, sample_process_result):
+        """リスト型で返されるテスト"""
+        sections = SlackPublisher.format_x_trend_digest_sections(sample_process_result)
+        assert isinstance(sections, list)
+        # ヘッダー+トレンド、キーワード、タイムラインの3セクション
+        assert len(sections) == 3
+
+    def test_first_section_has_header(self, sample_process_result):
+        """最初のセクションにヘッダーが含まれるテスト"""
+        sections = SlackPublisher.format_x_trend_digest_sections(sample_process_result)
+        assert "X AI トレンドダイジェスト" in sections[0]
+        assert "グローバル AI トレンド" in sections[0]
+
+    def test_keyword_section(self, sample_process_result):
+        """キーワードセクションのテスト"""
+        sections = SlackPublisher.format_x_trend_digest_sections(sample_process_result)
+        assert "キーワード検索ハイライト" in sections[1]
+        assert "Claude Code" in sections[1]
+
+    def test_timeline_section(self, sample_process_result):
+        """タイムラインセクションのテスト"""
+        sections = SlackPublisher.format_x_trend_digest_sections(sample_process_result)
+        assert "注目アカウントの発信" in sections[2]
+        assert "@karpathy" in sections[2]
+
+    def test_empty_result_returns_single_section(self):
+        """空のProcessResultで1セクションのリストが返されるテスト"""
+        result = ProcessResult()
+        sections = SlackPublisher.format_x_trend_digest_sections(result)
+        assert len(sections) == 1
+        assert "見つかりませんでした" in sections[0]
+
+    def test_trends_only_returns_single_section(self):
+        """トレンドのみの場合は1セクションのテスト"""
+        result = ProcessResult(
+            trend_summaries={
+                "global": [
+                    TrendSummary(
+                        trend_name="Test",
+                        topics=["topic1"],
+                        retweet_total=100,
+                        region="global",
+                    ),
+                ],
+            },
+            keyword_summaries=[],
+            timeline_summaries=[],
+        )
+        sections = SlackPublisher.format_x_trend_digest_sections(result)
+        assert len(sections) == 1
+        assert "X AI トレンドダイジェスト" in sections[0]
+        assert "Test" in sections[0]
+
+    def test_join_matches_format_x_trend_digest(self, sample_process_result):
+        """sectionsを結合した結果がformat_x_trend_digestと一致するテスト"""
+        sections = SlackPublisher.format_x_trend_digest_sections(sample_process_result)
+        joined = "\n".join(sections)
+        legacy = SlackPublisher.format_x_trend_digest(sample_process_result)
+        assert joined == legacy

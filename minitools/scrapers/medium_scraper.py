@@ -99,9 +99,9 @@ class MediumScraper:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """ブラウザを切断/閉じる"""
         if self.cdp_mode:
-            # CDP: ブラウザ自体は閉じない（セッション維持のため）
-            if self._browser:
-                await self._browser.close()  # 接続を切断するだけ
+            # CDP: browser.close()はChromeプロセスを終了させるため呼ばない
+            # playwright.stop()のみでPlaywright側の接続をクリーンアップする
+            pass
         else:
             if self._browser:
                 await self._browser.close()
@@ -136,6 +136,110 @@ class MediumScraper:
             self._context = await self._browser.new_context()
 
         logger.info("Connected to Chrome via CDP")
+
+        # Mediumログイン状態を確認し、未ログインなら待機
+        await self._ensure_medium_login()
+
+    async def _ensure_medium_login(self) -> None:
+        """
+        Mediumにログイン済みか確認し、未ログインならCDP接続を切断してログインを促す
+
+        CDP接続中はPlaywrightがChromeのウィンドウイベントを支配するため、
+        Google OAuthポップアップ等が正常に動作しない。
+        CDP接続を完全切断することで、ユーザーが通常通りブラウザを操作できる。
+        ログイン完了後にCDP再接続する。
+        """
+        # ログイン状態チェック
+        page = await self._context.new_page()
+        needs_login = False
+        try:
+            logger.info("Checking Medium login status...")
+            await page.goto(
+                "https://medium.com/me",
+                wait_until="domcontentloaded",
+                timeout=30000,
+            )
+            await asyncio.sleep(3)
+
+            current_url = page.url
+            needs_login = (
+                "medium.com/m/signin" in current_url
+                or "medium.com/m/callback" in current_url
+            )
+        except Exception as e:
+            logger.warning(f"Medium login check failed (non-critical): {e}")
+            return
+        finally:
+            await page.close()
+
+        if not needs_login:
+            logger.info("Medium login confirmed")
+            return
+
+        # Playwrightを完全停止してChromeへの干渉を排除する
+        # browser.close()はChromeプロセスを終了させるため使わない
+        # playwright.stop()でPlaywrightプロセスごと停止する
+        logger.info("Stopping Playwright to release Chrome control...")
+        self._browser = None
+        self._context = None
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None
+
+        logger.warning(
+            "\n" + "=" * 60 + "\n"
+            "  Medium にログインされていません。\n"
+            "  Chrome ブラウザで Medium にログインしてください。\n"
+            "  （Playwright を停止済み — Google ログイン等が正常に動作します）\n"
+            "  ログイン完了後、Enter キーを押してください。\n"
+            + "=" * 60
+        )
+
+        # ユーザーがEnterを押すまで待機（ブロッキングI/Oをスレッドで実行）
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: input("  >> ログイン完了後、Enter を押してください... "),
+        )
+
+        # Playwrightを再起動してCDP再接続
+        from playwright.async_api import async_playwright
+
+        logger.info("Restarting Playwright and reconnecting to Chrome via CDP...")
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.chromium.connect_over_cdp(
+            f"http://localhost:{CDP_PORT}"
+        )
+        contexts = self._browser.contexts
+        if contexts:
+            self._context = contexts[0]
+        else:
+            self._context = await self._browser.new_context()
+
+        # ログイン後の確認
+        check_page = await self._context.new_page()
+        try:
+            await check_page.goto(
+                "https://medium.com/me",
+                wait_until="domcontentloaded",
+                timeout=30000,
+            )
+            await asyncio.sleep(3)
+            check_url = check_page.url
+            if (
+                "medium.com/m/signin" in check_url
+                or "medium.com/m/callback" in check_url
+            ):
+                logger.warning(
+                    "Medium login not detected. "
+                    "Proceeding — articles may be truncated."
+                )
+            else:
+                logger.info("Medium login confirmed!")
+        except Exception as e:
+            logger.warning(f"Login verification failed: {e}")
+        finally:
+            await check_page.close()
 
     async def _is_chrome_running(self) -> bool:
         """CDP対応のChromeが起動しているか確認"""
@@ -205,6 +309,23 @@ class MediumScraper:
             "May be blocked by Cloudflare. Use --cdp for reliable access."
         )
 
+    async def _expand_lazy_content(self, page: Any) -> None:
+        """
+        遅延読み込みコンテンツを一括で展開する
+
+        ページ最下部へ一度スクロールしてlazy loading要素をトリガーし、
+        レンダリング完了を待って最上部に戻す。
+        """
+        try:
+            await page.evaluate(
+                "window.scrollTo(0, document.documentElement.scrollHeight)"
+            )
+            await asyncio.sleep(2)
+            await page.evaluate("window.scrollTo(0, 0)")
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"Lazy content expansion failed (non-critical): {e}")
+
     async def scrape_article(self, url: str) -> str:
         """
         記事URLから全文HTMLを取得する
@@ -248,12 +369,36 @@ class MediumScraper:
                 logger.error(f"Error page detected for: {url}")
                 return ""
 
+            # 遅延読み込みコンテンツを展開する
+            await self._expand_lazy_content(page)
+
+            # ペイウォール/ログイン要求の検出
+            paywall = await page.query_selector(
+                "[data-testid='paywall-background-color'], "
+                "[aria-label='upgrade'], "
+                "div.meteredContent"
+            )
+            if paywall:
+                logger.warning(
+                    "Paywall detected — Medium session may have expired. "
+                    "Open the CDP Chrome browser and log in to Medium."
+                )
+
             # 記事本文のHTMLを取得
             article_element = await page.query_selector("article")
 
             if article_element:
                 html = await article_element.evaluate("el => el.outerHTML")
                 logger.info(f"Article HTML extracted: {len(html)} chars")
+
+                # コンテンツが短すぎる場合は警告
+                if len(html) < 3000:
+                    logger.warning(
+                        f"Article HTML is suspiciously short ({len(html)} chars). "
+                        "Possible causes: paywall, login required, or "
+                        "incomplete page load."
+                    )
+
                 return html
 
             logger.error(f"No <article> tag found for: {url}")

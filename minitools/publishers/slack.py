@@ -4,6 +4,7 @@ Slack publisher module for sending messages to Slack channels.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -77,6 +78,29 @@ class SlackPublisher:
         except Exception as e:
             logger.error(f"Error sending message to Slack: {e}")
             return False
+
+    async def send_messages(
+        self, messages: list[str], webhook_url: str | None = None
+    ) -> bool:
+        """
+        複数メッセージを順番にSlackに送信
+
+        Args:
+            messages: 送信するメッセージのリスト
+            webhook_url: 使用するWebhook URL（オプション）
+
+        Returns:
+            全メッセージの送信成功の場合True
+        """
+        for i, message in enumerate(messages):
+            success = await self.send_message(message, webhook_url)
+            if not success:
+                logger.error(f"Failed to send message {i + 1}/{len(messages)}")
+                return False
+            # レート制限回避のためスリープ（最後のメッセージ以外）
+            if i < len(messages) - 1:
+                await asyncio.sleep(0.5)
+        return True
 
     def format_articles_message(
         self,
@@ -413,24 +437,21 @@ class SlackPublisher:
         return entry
 
     @staticmethod
-    def format_x_trend_digest(
+    def format_x_trend_digest_sections(
         process_result: Any,
-    ) -> str:
+    ) -> list[str]:
         """
-        Xトレンドダイジェストをフォーマット
+        Xトレンドダイジェストをセクションごとのメッセージリストとしてフォーマット
 
         Args:
             process_result: ProcessResult または Dict[str, list[TrendSummary]]（後方互換）
 
         Returns:
-            フォーマットされたメッセージ（3000文字以内）
+            セクションごとのメッセージリスト（省略なし）
         """
         from datetime import datetime as dt
 
         date_str = dt.now().strftime("%Y-%m-%d")
-        message = f"🐦 *X AI トレンドダイジェスト ({date_str})*\n\n"
-
-        max_length = 3000
 
         # ProcessResult or dict の判定
         if hasattr(process_result, "trend_summaries"):
@@ -448,21 +469,29 @@ class SlackPublisher:
             + len(timeline_summaries)
         )
         if total_items == 0:
-            message += "AI関連のトレンドは見つかりませんでした。\n"
-            return message
+            return [
+                f"🐦 *X AI トレンドダイジェスト ({date_str})*\n\n"
+                "AI関連のトレンドは見つかりませんでした。\n"
+            ]
 
-        # セクション1: トレンド（グローバル → 日本の順）
+        sections: list[str] = []
+
+        # セクション1: ヘッダー + トレンド（グローバル → 日本の順）
         region_order = [
             ("global", "🌏 グローバル AI トレンド"),
             ("japan", "🇯🇵 日本 AI トレンド"),
         ]
+
+        trend_section = f"🐦 *X AI トレンドダイジェスト ({date_str})*\n\n"
+        has_trends = False
 
         for region_key, section_header in region_order:
             summaries = summaries_by_region.get(region_key, [])
             if not summaries:
                 continue
 
-            section = f"*{section_header}*\n\n"
+            has_trends = True
+            trend_section += f"*{section_header}*\n\n"
 
             for i, summary in enumerate(summaries, 1):
                 rt = summary.retweet_total if hasattr(summary, "retweet_total") else 0
@@ -473,55 +502,63 @@ class SlackPublisher:
                 entry = SlackPublisher._build_summary_entry(
                     i, summary.trend_name, topics, rt, opinions
                 )
+                trend_section += entry
 
-                if len(message) + len(section) + len(entry) > max_length:
-                    section += f"_（以降 {len(summaries) - i + 1} 件は省略）_\n"
-                    break
+            trend_section += "─" * 30 + "\n\n"
 
-                section += entry
-
-            message += section
-            message += "─" * 30 + "\n\n"
+        if has_trends:
+            sections.append(trend_section.rstrip() + "\n")
+        else:
+            # トレンドがなくてもヘッダーは最初のセクションに含める
+            sections.append(trend_section.rstrip() + "\n")
 
         # セクション2: キーワード検索ハイライト
         if keyword_summaries:
-            section = "*🔍 キーワード検索ハイライト*\n\n"
+            keyword_section = "*🔍 キーワード検索ハイライト*\n\n"
 
             for i, ks in enumerate(keyword_summaries, 1):
                 entry = SlackPublisher._build_summary_entry(
                     i, ks.keyword, ks.topics, ks.retweet_total, ks.key_opinions
                 )
+                keyword_section += entry
 
-                if len(message) + len(section) + len(entry) > max_length:
-                    section += f"_（以降 {len(keyword_summaries) - i + 1} 件は省略）_\n"
-                    break
-
-                section += entry
-
-            message += section
-            message += "─" * 30 + "\n\n"
+            keyword_section += "─" * 30 + "\n"
+            sections.append(keyword_section)
 
         # セクション3: 注目アカウントの発信
         if timeline_summaries:
-            section = "*👤 注目アカウントの発信*\n\n"
+            timeline_section = "*👤 注目アカウントの発信*\n\n"
 
             for i, ts in enumerate(timeline_summaries, 1):
                 entry = SlackPublisher._build_summary_entry(
-                    i, f"@{ts.username}", ts.topics, ts.retweet_total, ts.key_opinions
+                    i,
+                    f"@{ts.username}",
+                    ts.topics,
+                    ts.retweet_total,
+                    ts.key_opinions,
                 )
+                timeline_section += entry
 
-                if len(message) + len(section) + len(entry) > max_length:
-                    section += (
-                        f"_（以降 {len(timeline_summaries) - i + 1} 件は省略）_\n"
-                    )
-                    break
+            timeline_section += "─" * 30 + "\n"
+            sections.append(timeline_section)
 
-                section += entry
+        return sections
 
-            message += section
-            message += "─" * 30 + "\n\n"
+    @staticmethod
+    def format_x_trend_digest(
+        process_result: Any,
+    ) -> str:
+        """
+        Xトレンドダイジェストをフォーマット（後方互換）
 
-        return message.rstrip() + "\n"
+        Args:
+            process_result: ProcessResult または Dict[str, list[TrendSummary]]（後方互換）
+
+        Returns:
+            フォーマットされたメッセージ
+        """
+        sections = SlackPublisher.format_x_trend_digest_sections(process_result)
+        return "\n".join(sections)
 
     async def send_weekly_digest(
         self,

@@ -56,6 +56,8 @@ class MarkdownConverter:
         """
         Medium固有のHTML構造から記事本文を抽出する
 
+        複数のsectionがある場合、最もテキスト量が多いsectionを本文とみなす。
+
         Args:
             soup: BeautifulSoupオブジェクト
 
@@ -68,8 +70,16 @@ class MarkdownConverter:
             # article内のsectionを探す
             sections = article.find_all("section")
             if sections:
-                # 最後のsection（通常本文が含まれる）
-                return sections[-1]
+                # テキスト量が最大のsectionを本文として選択
+                best_section = max(
+                    sections,
+                    key=lambda s: len(s.get_text(strip=True)),
+                )
+                logger.debug(
+                    f"Selected section with {len(best_section.get_text(strip=True))} "
+                    f"chars from {len(sections)} section(s)"
+                )
+                return best_section
             return article
 
         # articleタグがない場合はbodyを使用

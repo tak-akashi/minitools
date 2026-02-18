@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Changed
+- **X トレンドダイジェスト Slack送信の省略撤廃**: 3000文字制限・省略ロジックを撤廃し、全内容を送信するように変更
+  - `format_x_trend_digest_sections()` 追加: セクションごとの `list[str]` を返す新メソッド
+  - `format_x_trend_digest()` を後方互換ラッパーに変更（内部で sections を結合）
+  - `send_messages()` 追加: 複数メッセージを順番に送信（0.5秒間隔）
+  - `scripts/x_trend.py`: セクション分割送信に対応、dry-run時はセクション番号付き表示
+
 ### Fixed
 - **XTrendCollector APIレスポンスパーシング修正**: TwitterAPI.ioのレスポンス構造がネスト形式（`{"status": "success", "data": {"tweets": [...]}}`）であることに対応
   - `_parse_tweets()`: `data.data.tweets` のネスト構造に対応（従来は `data.tweets` のフラット構造のみ対応）
