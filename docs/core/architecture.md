@@ -335,7 +335,7 @@ flowchart LR
     K --> KS
     U --> UF --> US
 
-    TS --> SP["SlackPublisher\nformat_x_trend_digest()"]
+    TS --> SP["SlackPublisher\nformat_x_trend_digest_sections()\n→ send_messages()"]
     KS --> SP
     US --> SP
     SP --> Slack["Slack Channel"]

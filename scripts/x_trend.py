@@ -119,15 +119,16 @@ async def generate_digest(
     )
     logger.info(f"Processed {total_summaries} items total")
 
-    # Slackフォーマットでメッセージを生成
-    message = SlackPublisher.format_x_trend_digest(process_result)
+    # Slackフォーマットでセクションごとのメッセージを生成
+    messages = SlackPublisher.format_x_trend_digest_sections(process_result)
 
     # dry-runの場合は標準出力に表示
     if dry_run:
-        print("\n" + "=" * 60)
-        print("【DRY RUN】以下のメッセージがSlackに送信されます:")
-        print("=" * 60 + "\n")
-        print(message)
+        for i, msg in enumerate(messages, 1):
+            print("\n" + "=" * 60)
+            print(f"【DRY RUN】セクション {i}/{len(messages)}:")
+            print("=" * 60 + "\n")
+            print(msg)
         print("\n" + "=" * 60)
         logger.info("Dry run complete - Slack message not sent")
         return total_summaries
@@ -139,14 +140,17 @@ async def generate_digest(
             "SLACK_X_TIMELINE_SUMMARY_WEBHOOK_URL is not set. Skipping Slack notification."
         )
         print("Slack Webhook URLが設定されていないため、通知をスキップしました。")
-        print("\n" + message)
+        for msg in messages:
+            print("\n" + msg)
         return total_summaries
 
     async with SlackPublisher(webhook_url=webhook_url) as slack_publisher:
-        success = await slack_publisher.send_message(message)
+        success = await slack_publisher.send_messages(messages)
         if success:
             logger.info("X trend digest sent to Slack successfully")
-            print("XトレンドダイジェストをSlackに送信しました。")
+            print(
+                f"XトレンドダイジェストをSlackに送信しました（{len(messages)}セクション）。"
+            )
             return total_summaries
         else:
             logger.error("Failed to send X trend digest to Slack")

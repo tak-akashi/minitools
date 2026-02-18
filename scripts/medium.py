@@ -288,56 +288,68 @@ async def main_async():
                 block_builder = NotionBlockBuilder()
                 notion_pub = NotionPublisher(source_type="medium")
 
-                translate_stats = {"success": 0, "skipped": 0, "failed": 0}
+                # 翻訳済み記事を事前にフィルタリング
+                pending_targets = []
+                already_translated = 0
+                for article in translate_targets:
+                    url = article.get("url", "")
+                    page_info = await notion_pub.find_page_by_url(
+                        database_id, url
+                    )
+                    if not page_info:
+                        logger.warning(f"Page not found for URL: {url}")
+                        continue
+                    if page_info.is_translated:
+                        logger.info(f"Already translated, skipping: {url}")
+                        already_translated += 1
+                        continue
+                    pending_targets.append((article, page_info))
 
-                async with MediumScraper(cdp_mode=args.cdp) as scraper:
-                    for article in translate_targets:
-                        url = article.get("url", "")
-                        try:
-                            page_info = await notion_pub.find_page_by_url(
-                                database_id, url
-                            )
-                            if not page_info:
-                                logger.warning(f"Page not found for URL: {url}")
-                                translate_stats["skipped"] += 1
-                                continue
+                if already_translated > 0:
+                    logger.info(f"翻訳済み: {already_translated}件（スキップ）")
 
-                            if page_info.is_translated:
-                                logger.info(f"Already translated, skipping: {url}")
-                                translate_stats["skipped"] += 1
-                                continue
+                if not pending_targets:
+                    logger.info("全記事が翻訳済みです")
+                else:
+                    logger.info(f"未翻訳: {len(pending_targets)}件を翻訳します")
+                    translate_stats = {"success": 0, "failed": 0}
 
-                            html = await scraper.scrape_article(url)
-                            if not html:
-                                translate_stats["failed"] += 1
-                                continue
+                    async with MediumScraper(cdp_mode=args.cdp) as scraper:
+                        for article, page_info in pending_targets:
+                            url = article.get("url", "")
+                            try:
+                                html = await scraper.scrape_article(url)
+                                if not html:
+                                    translate_stats["failed"] += 1
+                                    continue
 
-                            md = converter.convert(html)
-                            translated = await ft_translator.translate(md)
+                                md = converter.convert(html)
+                                translated = await ft_translator.translate(md)
 
-                            blocks = block_builder.build_blocks(translated)
-                            success = await notion_pub.append_blocks(
-                                page_info.page_id, blocks
-                            )
-
-                            if success:
-                                await notion_pub.update_page_properties(
-                                    page_info.page_id,
-                                    {"Translated": {"checkbox": True}},
+                                blocks = block_builder.build_blocks(translated)
+                                success = await notion_pub.append_blocks(
+                                    page_info.page_id, blocks
                                 )
-                                translate_stats["success"] += 1
-                            else:
-                                translate_stats["failed"] += 1
-                        except Exception as e:
-                            logger.error(f"Translation error for {url}: {e}")
-                            translate_stats["failed"] += 1
 
-                logger.info("=" * 60)
-                logger.info("全文翻訳結果:")
-                logger.info(f"  成功: {translate_stats['success']}件")
-                logger.info(f"  スキップ: {translate_stats['skipped']}件")
-                logger.info(f"  失敗: {translate_stats['failed']}件")
-                logger.info("=" * 60)
+                                if success:
+                                    await notion_pub.update_page_properties(
+                                        page_info.page_id,
+                                        {"Translated": {"checkbox": True}},
+                                    )
+                                    translate_stats["success"] += 1
+                                else:
+                                    translate_stats["failed"] += 1
+                            except Exception as e:
+                                logger.error(f"Translation error for {url}: {e}")
+                                translate_stats["failed"] += 1
+
+                    logger.info("=" * 60)
+                    logger.info("全文翻訳結果:")
+                    logger.info(f"  成功: {translate_stats['success']}件")
+                    logger.info(f"  失敗: {translate_stats['failed']}件")
+                    if already_translated > 0:
+                        logger.info(f"  翻訳済み: {already_translated}件")
+                    logger.info("=" * 60)
         else:
             logger.info(
                 f"拍手数 >= {clap_threshold} の記事がないため、全文翻訳はスキップします"

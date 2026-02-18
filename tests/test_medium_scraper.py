@@ -64,7 +64,7 @@ class TestMediumScraperContextManager:
 
     @pytest.mark.asyncio
     async def test_aexit_cdp_cleanup(self, cdp_scraper):
-        """CDPモード: __aexit__で接続が切断される（ブラウザは閉じない）"""
+        """CDPモード: __aexit__でplaywright.stop()のみ実行（browser.close()は呼ばない）"""
         mock_browser = AsyncMock()
         mock_playwright = AsyncMock()
         cdp_scraper._browser = mock_browser
@@ -73,7 +73,7 @@ class TestMediumScraperContextManager:
 
         await cdp_scraper.__aexit__(None, None, None)
 
-        mock_browser.close.assert_awaited_once()
+        mock_browser.close.assert_not_awaited()
         mock_playwright.stop.assert_awaited_once()
         assert cdp_scraper._browser is None
         assert cdp_scraper._context is None

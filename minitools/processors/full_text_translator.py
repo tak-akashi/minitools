@@ -14,7 +14,11 @@ from minitools.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # デフォルトのチャンクサイズ（文字数）
-DEFAULT_CHUNK_SIZE = 6000
+# LLMの出力トークン制限による翻訳切れを防ぐため、控えめに設定
+DEFAULT_CHUNK_SIZE = 3000
+
+# 翻訳結果が元テキストに対してこの比率未満の場合、切れている可能性がある
+TRUNCATION_RATIO_THRESHOLD = 0.3
 
 TRANSLATION_PROMPT = """あなたはプロの翻訳者です。以下のMarkdownテキストを日本語に翻訳してください。
 
@@ -195,6 +199,33 @@ class FullTextTranslator:
 
         return chunks
 
+    def _is_likely_truncated(self, original: str, translated: str) -> bool:
+        """
+        翻訳結果が途中で切れている可能性があるか判定する
+
+        Args:
+            original: 元テキスト
+            translated: 翻訳結果
+
+        Returns:
+            切れている可能性がある場合True
+        """
+        if not original or not translated:
+            return False
+
+        # 翻訳結果が元テキストに対して極端に短い場合
+        ratio = len(translated) / len(original)
+        if ratio < TRUNCATION_RATIO_THRESHOLD:
+            logger.warning(
+                f"Translation may be truncated: "
+                f"original={len(original)} chars, "
+                f"translated={len(translated)} chars, "
+                f"ratio={ratio:.2f}"
+            )
+            return True
+
+        return False
+
     async def _translate_chunk(self, chunk: str) -> str:
         """
         1つのチャンクを翻訳する（リトライ付き）
@@ -214,9 +245,31 @@ class FullTextTranslator:
                     model=self.model,
                 )
                 translated = result.strip()
-                if translated:
-                    return translated
-                logger.warning(f"Empty translation result (attempt {attempt + 1})")
+                if not translated:
+                    logger.warning(
+                        f"Empty translation result (attempt {attempt + 1})"
+                    )
+                    continue
+
+                # 翻訳切れ検出: 比率が極端に低い場合はリトライ
+                if self._is_likely_truncated(chunk, translated):
+                    if attempt < self.max_retries - 1:
+                        delay = 2**attempt
+                        logger.warning(
+                            f"Retrying due to possible truncation "
+                            f"(attempt {attempt + 1}/{self.max_retries}), "
+                            f"waiting {delay}s..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # 最終リトライでも切れている場合はそのまま返す
+                        logger.warning(
+                            "Translation may still be truncated after all retries, "
+                            "using best result"
+                        )
+
+                return translated
             except Exception as e:
                 delay = 2**attempt  # 指数バックオフ: 1, 2, 4秒
                 logger.warning(

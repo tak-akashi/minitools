@@ -74,7 +74,11 @@ class LangChainGeminiClient(BaseLLMClient):
                 model=use_model,
                 google_api_key=self.api_key,
                 convert_system_message_to_human=True,
-                model_kwargs={"response_mime_type": "application/json"},
+                max_output_tokens=65536,
+                model_kwargs={
+                    "response_mime_type": "application/json",
+                    "thinking_config": {"thinking_budget": 0},
+                },
             )
 
         if self._chat_model is not None and self._chat_model.model == use_model:
@@ -84,6 +88,8 @@ class LangChainGeminiClient(BaseLLMClient):
             model=use_model,
             google_api_key=self.api_key,
             convert_system_message_to_human=True,
+            max_output_tokens=65536,
+            model_kwargs={"thinking_config": {"thinking_budget": 0}},
         )
         return self._chat_model
 
