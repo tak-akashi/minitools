@@ -315,32 +315,82 @@ async def main_async():
                     translate_stats = {"success": 0, "failed": 0}
 
                     async with MediumScraper(cdp_mode=args.cdp) as scraper:
-                        for article, page_info in pending_targets:
+                        for idx, (article, page_info) in enumerate(
+                            pending_targets, 1
+                        ):
                             url = article.get("url", "")
+                            title = article.get("title", "")[:50]
+                            logger.info(
+                                f"[{idx}/{len(pending_targets)}] 全文翻訳開始: "
+                                f"{title}..."
+                            )
                             try:
                                 html = await scraper.scrape_article(url)
                                 if not html:
+                                    logger.warning(
+                                        f"  HTML取得失敗（空）: {url}"
+                                    )
                                     translate_stats["failed"] += 1
                                     continue
 
                                 md = converter.convert(html)
+                                logger.info(
+                                    f"  Markdown変換: {len(md)} chars"
+                                )
                                 translated = await ft_translator.translate(md)
+                                logger.info(
+                                    f"  翻訳完了: {len(translated)} chars"
+                                )
 
                                 blocks = block_builder.build_blocks(translated)
+                                logger.info(
+                                    f"  Notionブロック構築: {len(blocks)} blocks"
+                                )
+                                if not blocks:
+                                    logger.warning(
+                                        f"  ブロックが空のためスキップ: {url}"
+                                    )
+                                    translate_stats["failed"] += 1
+                                    continue
+
                                 success = await notion_pub.append_blocks(
                                     page_info.page_id, blocks
                                 )
+                                if not success:
+                                    logger.error(
+                                        f"  Notionブロック追記失敗: "
+                                        f"page_id={page_info.page_id}"
+                                    )
+                                    translate_stats["failed"] += 1
+                                    continue
 
-                                if success:
+                                logger.info(
+                                    f"  Notionブロック追記成功: "
+                                    f"page_id={page_info.page_id}"
+                                )
+
+                                prop_success = (
                                     await notion_pub.update_page_properties(
                                         page_info.page_id,
                                         {"Translated": {"checkbox": True}},
                                     )
-                                    translate_stats["success"] += 1
-                                else:
-                                    translate_stats["failed"] += 1
+                                )
+                                if not prop_success:
+                                    logger.error(
+                                        f"  Translatedチェックボックス更新失敗: "
+                                        f"page_id={page_info.page_id}"
+                                    )
+                                    # ブロックは追記済みなので成功扱い
+                                    # だがチェックボックスは未更新
+
+                                translate_stats["success"] += 1
+                                logger.info(
+                                    f"  完了: {title}..."
+                                )
                             except Exception as e:
-                                logger.error(f"Translation error for {url}: {e}")
+                                logger.error(
+                                    f"  Translation error for {url}: {e}"
+                                )
                                 translate_stats["failed"] += 1
 
                     logger.info("=" * 60)
