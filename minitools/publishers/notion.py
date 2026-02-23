@@ -38,6 +38,36 @@ class NotionPublisher:
         self.client = Client(auth=self.api_key)
         logger.info(f"Notion client initialized (source_type: {source_type})")
 
+    async def _retry_api_call(
+        self, func, max_retries: int = 3, description: str = "API call"
+    ):
+        """
+        Notion APIコールをレートリミット対応のリトライ付きで実行
+
+        Args:
+            func: 実行する同期関数（lambda）
+            max_retries: 最大リトライ回数
+            description: ログ用の説明
+
+        Returns:
+            API呼び出しの結果
+        """
+        loop = asyncio.get_event_loop()
+        for attempt in range(max_retries):
+            try:
+                return await loop.run_in_executor(None, func)
+            except Exception as e:
+                if "rate limited" in str(e).lower() and attempt < max_retries - 1:
+                    delay = 2 ** (attempt + 1)  # 2, 4, 8秒
+                    logger.warning(
+                        f"  Rate limited ({description}), "
+                        f"retrying in {delay}s... "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+
     def _normalize_url_by_source(self, url: str) -> str:
         """
         ソースタイプに応じたURL正規化
@@ -92,17 +122,15 @@ class NotionPublisher:
             logger.debug(f"  Original URL: {url}")
             logger.info(f"  Normalized URL: {normalized_url}")
 
-            loop = asyncio.get_event_loop()
-
             # まずHTTPS版で検索
             result = cast(
                 Dict[str, Any],
-                await loop.run_in_executor(
-                    None,
+                await self._retry_api_call(
                     lambda: self.client.databases.query(
                         database_id=database_id,
                         filter={"property": "URL", "url": {"equals": normalized_url}},
                     ),
+                    description=f"check_existing({normalized_url[:50]})",
                 ),
             )
 
@@ -120,12 +148,12 @@ class NotionPublisher:
 
                 result = cast(
                     Dict[str, Any],
-                    await loop.run_in_executor(
-                        None,
+                    await self._retry_api_call(
                         lambda: self.client.databases.query(
                             database_id=database_id,
                             filter={"property": "URL", "url": {"equals": http_url}},
                         ),
+                        description=f"check_existing_http({http_url[:50]})",
                     ),
                 )
 
@@ -169,14 +197,13 @@ class NotionPublisher:
             作成されたページのID
         """
         try:
-            loop = asyncio.get_event_loop()
             page = cast(
                 Dict[str, Any],
-                await loop.run_in_executor(
-                    None,
+                await self._retry_api_call(
                     lambda: self.client.pages.create(
                         parent={"database_id": database_id}, properties=properties
                     ),
+                    description="create_page",
                 ),
             )
 
@@ -532,12 +559,11 @@ class NotionPublisher:
             更新成功の場合True
         """
         try:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
+            await self._retry_api_call(
                 lambda: self.client.pages.update(
                     page_id=page_id, properties=properties
                 ),
+                description=f"update_page_properties({page_id[:8]})",
             )
             logger.debug(f"Page properties updated: {page_id}")
             return True
@@ -563,15 +589,14 @@ class NotionPublisher:
 
             logger.info(f"Finding page by URL: {normalized_url}")
 
-            loop = asyncio.get_event_loop()
             result = cast(
                 Dict[str, Any],
-                await loop.run_in_executor(
-                    None,
+                await self._retry_api_call(
                     lambda: self.client.databases.query(
                         database_id=database_id,
                         filter={"property": "URL", "url": {"equals": normalized_url}},
                     ),
+                    description=f"find_page_by_url({normalized_url[:50]})",
                 ),
             )
 
@@ -637,38 +662,24 @@ class NotionPublisher:
             f"to page {page_id[:8]}..."
         )
 
-        loop = asyncio.get_event_loop()
-
         for i in range(0, len(blocks), batch_size):
             batch = blocks[i : i + batch_size]
             batch_num = i // batch_size + 1
 
             logger.info(f"  Batch {batch_num}/{total_batches}: {len(batch)} blocks")
 
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    await loop.run_in_executor(
-                        None,
-                        lambda b=batch: self.client.blocks.children.append(  # type: ignore[misc]
-                            block_id=page_id, children=b
-                        ),
-                    )
-                    break
-                except Exception as e:
-                    if attempt < max_retries - 1:
-                        delay = 2**attempt
-                        logger.warning(
-                            f"  Batch {batch_num} failed (attempt {attempt + 1}): "
-                            f"{e}, retrying in {delay}s..."
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.error(
-                            f"  Batch {batch_num} failed after "
-                            f"{max_retries} attempts: {e}"
-                        )
-                        return False
+            try:
+                await self._retry_api_call(
+                    lambda b=batch: self.client.blocks.children.append(  # type: ignore[misc]
+                        block_id=page_id, children=b
+                    ),
+                    description=f"append_blocks(batch {batch_num}/{total_batches})",
+                )
+            except Exception as e:
+                logger.error(
+                    f"  Batch {batch_num} failed after retries: {e}"
+                )
+                return False
 
         logger.info(f"All {len(blocks)} blocks appended successfully")
         return True

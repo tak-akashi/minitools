@@ -635,6 +635,16 @@ uv run x-trend --no-keywords      # キーワード検索をスキップ
 uv run x-trend --no-timeline      # タイムライン監視をスキップ
 ```
 
+### X フォロー中アカウント一覧
+
+X（Twitter）のフォロー中アカウント一覧を取得し、`settings.yaml`の`watch_accounts`設定用にYAML出力するユーティリティです。
+
+```bash
+uv run x-followings --user YOUR_USERNAME               # フォロー一覧を表示
+uv run x-followings --user YOUR_USERNAME --limit 50    # 上限50件
+uv run x-followings --user YOUR_USERNAME --format yaml # YAML形式で出力
+```
+
 ### YouTube要約ツール
 
 YouTube動画の音声を文字起こしし、要約を日本語で出力します。

@@ -61,7 +61,8 @@ minitools/
 │   ├── youtube.py                 # youtube コマンド
 │   ├── google_alert_weekly_digest.py  # google-alert-weekly-digest コマンド
 │   ├── arxiv_weekly.py            # arxiv-weekly コマンド
-│   └── x_trend.py                 # x-trend コマンド
+│   ├── x_trend.py                 # x-trend コマンド
+│   └── x_followings.py            # x-followings コマンド
 │
 ├── docs/                           # ドキュメント
 │   ├── core/                      # コアドキュメント
@@ -211,6 +212,7 @@ LLMを使用してコンテンツを処理するモジュール群。
 | `google_alert_weekly_digest.py` | `google-alert-weekly-digest` | Google Alerts週次ダイジェストの生成・Slack通知 |
 | `arxiv_weekly.py` | `arxiv-weekly` | ArXiv週次ダイジェストの生成・Slack通知 |
 | `x_trend.py` | `x-trend` | X トレンドの収集・AI関連フィルタ・Slack通知 |
+| `x_followings.py` | `x-followings` | X フォロー中アカウント一覧取得・YAML出力 |
 
 ## 新規コンポーネント追加手順
 

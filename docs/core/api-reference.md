@@ -425,8 +425,19 @@ class XTrendCollector:
     async def collect(self, regions: list[str] = None, tweets_per_trend: int = 20, fetch_tweets: bool = True) -> dict[str, list[TrendWithTweets]]:
         """指定地域のトレンドと関連ツイートを収集（fetch_tweets=Falseでコスト最適化）"""
 
-    async def collect_all(self, regions=None, keywords=None, watch_accounts=None, ...) -> CollectResult:
-        """3ソース（トレンド・キーワード・タイムライン）を並列で収集"""
+    async def collect_all(
+        self,
+        regions: list[str] | None = None,
+        keywords: list[str] | None = None,
+        watch_accounts: list[str] | None = None,
+        tweets_per_trend: int = 20,
+        tweets_per_keyword: int = 20,
+        tweets_per_account: int = 20,
+        enable_trends: bool = True,
+        enable_keywords: bool = True,
+        enable_timeline: bool = True,
+    ) -> CollectResult:
+        """3ソース（トレンド・キーワード・タイムライン）を並列で収集（enable_*フラグで個別制御）"""
 ```
 
 **使用例:**
@@ -661,7 +672,7 @@ def get_embedding_client(
     Embeddingクライアントを取得するファクトリ関数
 
     Args:
-        provider: プロバイダー名（"ollama" または "openai"）
+        provider: プロバイダー名（"ollama", "openai", "gemini"）
                   省略時は設定ファイルから取得
 
     Returns:
@@ -1615,8 +1626,8 @@ class XTrendProcessor:
 
     def __init__(self, llm_client: BaseLLMClient, max_concurrent: int = 3): ...
 
-    async def filter_ai_trends(self, trends: list[TrendWithTweets]) -> list[TrendWithTweets]:
-        """AI関連トレンドをLLMでバッチフィルタリング"""
+    async def filter_ai_trends(self, trends: list[TrendWithTweets], max_trends: int = 10) -> list[TrendWithTweets]:
+        """AI関連トレンドをLLMでバッチフィルタリング（最大max_trends件）"""
 
     async def summarize_trend(self, trend_with_tweets: TrendWithTweets) -> TrendSummary:
         """トレンドのツイートを日本語で要約"""
@@ -1630,7 +1641,7 @@ class XTrendProcessor:
     async def summarize_timeline_results(self, results: list[UserTimelineResult]) -> list[TimelineSummary]:
         """タイムライン結果をフィルタリング後に要約"""
 
-    async def process_all(self, collect_result: CollectResult, max_trends: int, collector: XTrendCollector) -> ProcessResult:
+    async def process_all(self, collect_result: CollectResult, max_trends: int = 10, collector: XTrendCollector | None = None) -> ProcessResult:
         """3ソースを統合処理（トレンド: フィルタ→ツイート取得→要約、キーワード: 要約、タイムライン: フィルタ→要約）"""
 ```
 
@@ -1680,6 +1691,30 @@ class NotionPublisher:
         Args:
             api_key: Notion APIキー（デフォルト: 環境変数から取得）
             source_type: ソースタイプ（'arxiv', 'medium', 'google_alerts'）
+        """
+
+    async def _retry_api_call(
+        self,
+        func,
+        max_retries: int = 3,
+        description: str = "API call"
+    ):
+        """
+        Notion APIコールをレートリミット対応のリトライ付きで実行
+        全APIメソッド（check_existing, create_page, find_page_by_url,
+        update_page_properties, append_blocks）で使用。
+
+        Args:
+            func: 実行する同期関数（lambda）
+            max_retries: 最大リトライ回数（デフォルト: 3）
+            description: ログ用の説明
+
+        Returns:
+            API呼び出しの結果
+
+        Note:
+            レートリミットエラー時のみリトライ（2s, 4s, 8s の指数バックオフ）
+            それ以外のエラーは即座にraise
         """
 
     async def check_existing(

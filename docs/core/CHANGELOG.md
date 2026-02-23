@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added
+- **X フォロー中アカウント一覧取得ユーティリティ**: `x-followings` コマンドを追加
+  - `scripts/x_followings.py` - フォロー中アカウント一覧を取得
+  - `--user`（必須）、`--limit`、`--format`（list/yaml）オプション
+  - `settings.yaml`の`watch_accounts`設定用にYAML出力可能
+
 ### Changed
 - **X トレンドダイジェスト Slack送信の省略撤廃**: 3000文字制限・省略ロジックを撤廃し、全内容を送信するように変更
   - `format_x_trend_digest_sections()` 追加: セクションごとの `list[str]` を返す新メソッド
@@ -34,7 +40,7 @@
     - `scripts/x_trend.py` - CLIスクリプト
   - SlackPublisher拡張: `format_x_trend_digest()`, 地域別2セクション構成
   - 新規CLIコマンド: `x-trend`
-  - 新規環境変数: `TWITTER_API_IO_KEY`, `SLACK_X_TREND_WEBHOOK_URL`
+  - 新規環境変数: `TWITTER_API_IO_KEY`, `SLACK_X_TIMELINE_SUMMARY_WEBHOOK_URL`
   - 設定項目: `defaults.x_trend.max_trends`, `defaults.x_trend.tweets_per_trend`, `defaults.x_trend.provider`
 
 ### Changed
