@@ -186,25 +186,78 @@ class MediumScraper:
             await self._playwright.stop()
             self._playwright = None
 
+        login_timeout = 300  # 最大5分待機
+        poll_interval = 30   # 30秒ごとにチェック
+
         logger.warning(
             "\n" + "=" * 60 + "\n"
             "  Medium にログインされていません。\n"
             "  Chrome ブラウザで Medium にログインしてください。\n"
             "  （Playwright を停止済み — Google ログイン等が正常に動作します）\n"
-            "  ログイン完了後、Enter キーを押してください。\n"
+            f"  {login_timeout}秒以内にログインしてください（{poll_interval}秒ごとに確認）。\n"
             + "=" * 60
         )
 
-        # ユーザーがEnterを押すまで待機（ブロッキングI/Oをスレッドで実行）
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            lambda: input("  >> ログイン完了後、Enter を押してください... "),
-        )
-
-        # Playwrightを再起動してCDP再接続
+        # ポーリングでログイン状態を定期チェック
         from playwright.async_api import async_playwright
 
+        elapsed = 0
+        logged_in = False
+
+        while elapsed < login_timeout:
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+            logger.info(
+                f"Checking Medium login status... "
+                f"({elapsed}/{login_timeout}s)"
+            )
+
+            # CDP再接続してログイン状態を確認
+            try:
+                pw = await async_playwright().start()
+                browser = await pw.chromium.connect_over_cdp(
+                    f"http://localhost:{CDP_PORT}"
+                )
+                contexts = browser.contexts
+                ctx = contexts[0] if contexts else await browser.new_context()
+                check_page = await ctx.new_page()
+                try:
+                    await check_page.goto(
+                        "https://medium.com/me",
+                        wait_until="domcontentloaded",
+                        timeout=30000,
+                    )
+                    await asyncio.sleep(3)
+                    check_url = check_page.url
+                    if (
+                        "medium.com/m/signin" not in check_url
+                        and "medium.com/m/callback" not in check_url
+                    ):
+                        logged_in = True
+                finally:
+                    await check_page.close()
+                    await pw.stop()
+            except Exception as e:
+                logger.warning(f"Login poll check failed: {e}")
+                continue
+
+            if logged_in:
+                logger.info("Medium login confirmed!")
+                break
+            else:
+                logger.info("Not yet logged in, waiting...")
+
+        if not logged_in:
+            logger.error(
+                f"Login not detected after {login_timeout}s. "
+                "Skipping Medium scraping."
+            )
+            raise RuntimeError(
+                f"Medium login timeout ({login_timeout}s). "
+                "Please log in to Medium in Chrome before running."
+            )
+
+        # Playwrightを再起動してCDP再接続
         logger.info("Restarting Playwright and reconnecting to Chrome via CDP...")
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.connect_over_cdp(
@@ -215,31 +268,6 @@ class MediumScraper:
             self._context = contexts[0]
         else:
             self._context = await self._browser.new_context()
-
-        # ログイン後の確認
-        check_page = await self._context.new_page()
-        try:
-            await check_page.goto(
-                "https://medium.com/me",
-                wait_until="domcontentloaded",
-                timeout=30000,
-            )
-            await asyncio.sleep(3)
-            check_url = check_page.url
-            if (
-                "medium.com/m/signin" in check_url
-                or "medium.com/m/callback" in check_url
-            ):
-                logger.warning(
-                    "Medium login not detected. "
-                    "Proceeding — articles may be truncated."
-                )
-            else:
-                logger.info("Medium login confirmed!")
-        except Exception as e:
-            logger.warning(f"Login verification failed: {e}")
-        finally:
-            await check_page.close()
 
     async def _is_chrome_running(self) -> bool:
         """CDP対応のChromeが起動しているか確認"""
