@@ -181,7 +181,8 @@ class NotionPublisher:
 
         except Exception as e:
             logger.error(f"重複チェックエラー ({self.source_type}): {e}")
-            return False
+            logger.warning("安全のためスキップします（次回の実行で再処理されます）")
+            return True
 
     async def create_page(
         self, database_id: str, properties: Dict[str, Any]
@@ -498,13 +499,42 @@ class NotionPublisher:
             処理結果の統計と詳細（成功数、スキップ数、失敗数、および各記事のリスト）
         """
         semaphore = asyncio.Semaphore(max_concurrent)
+        lock = asyncio.Lock()
+        processed_urls: set[str] = set()
         stats = {"success": 0, "skipped": 0, "failed": 0}
         results: Dict[str, List[str]] = {"success": [], "skipped": [], "failed": []}
+
+        # バッチ内URL重複排除（事前フィルタ）
+        seen_urls: set[str] = set()
+        unique_articles = []
+        for article in articles:
+            url = self._normalize_url_by_source(article.get("url", ""))
+            if url and url in seen_urls:
+                title = article.get("title", "Unknown")
+                display_title = f"{title[:50]}..." if len(title) > 50 else title
+                logger.info(f"  バッチ内重複のためスキップ: {display_title}")
+                stats["skipped"] += 1
+                results["skipped"].append(display_title)
+            else:
+                if url:
+                    seen_urls.add(url)
+                unique_articles.append(article)
 
         async def save_with_semaphore(article):
             async with semaphore:
                 title = article.get("title", "Unknown")
                 display_title = f"{title[:50]}..." if len(title) > 50 else title
+                url = self._normalize_url_by_source(article.get("url", ""))
+
+                # ロック付きで処理済みURLチェック（並列タスク間の重複防止）
+                if url:
+                    async with lock:
+                        if url in processed_urls:
+                            logger.info(f"  並列処理内で重複のためスキップ: {display_title}")
+                            stats["skipped"] += 1
+                            results["skipped"].append(display_title)
+                            return
+                        processed_urls.add(url)
 
                 try:
                     result = await self.save_article(database_id, article)
@@ -519,8 +549,8 @@ class NotionPublisher:
                     stats["failed"] += 1
                     results["failed"].append(display_title)
 
-        # 全記事を並列処理
-        tasks = [save_with_semaphore(article) for article in articles]
+        # 全記事を並列処理（重複排除済み）
+        tasks = [save_with_semaphore(article) for article in unique_articles]
         await asyncio.gather(*tasks)
 
         # 詳細な結果ログ
