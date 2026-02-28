@@ -607,6 +607,9 @@ class NotionPublisher:
         """
         URLでNotionデータベースを検索し、既存ページの情報を返す
 
+        完全一致で見つからない場合、Medium記事はスラッグ（パス末尾）で
+        contains検索にフォールバックする（カスタムドメイン対応）
+
         Args:
             database_id: NotionデータベースID
             url: 検索するURL
@@ -632,17 +635,31 @@ class NotionPublisher:
 
             query_results = result.get("results", [])
             if query_results:
-                page = query_results[0]
-                page_id = page.get("id")
-                is_translated = (
-                    page.get("properties", {})
-                    .get("Translated", {})
-                    .get("checkbox", False)
-                )
-                logger.info(
-                    f"Page found: {page_id} (translated: {is_translated})"
-                )
-                return PageInfo(page_id=page_id, is_translated=is_translated)
+                return self._extract_page_info(query_results[0])
+
+            # Medium記事の場合、スラッグ（パス末尾）でcontains検索にフォールバック
+            # カスタムドメイン（ehandbook.comなど）とmedium.comのURL不一致に対応
+            if self.source_type == "medium":
+                slug = normalized_url.rsplit("/", 1)[-1]
+                if slug:
+                    logger.info(f"Exact match not found, trying slug search: {slug}")
+                    result = cast(
+                        Dict[str, Any],
+                        await self._retry_api_call(
+                            lambda: self.client.databases.query(
+                                database_id=database_id,
+                                filter={
+                                    "property": "URL",
+                                    "url": {"contains": slug},
+                                },
+                            ),
+                            description=f"find_page_by_url_slug({slug[:50]})",
+                        ),
+                    )
+                    query_results = result.get("results", [])
+                    if query_results:
+                        logger.info(f"Page found via slug match: {slug}")
+                        return self._extract_page_info(query_results[0])
 
             logger.info(f"Page not found for URL: {url}")
             return None
@@ -650,6 +667,17 @@ class NotionPublisher:
         except Exception as e:
             logger.error(f"Error finding page by URL: {e}")
             return None
+
+    def _extract_page_info(self, page: Dict[str, Any]) -> PageInfo:
+        """NotionページデータからPageInfoを抽出する"""
+        page_id = page.get("id")
+        is_translated = (
+            page.get("properties", {})
+            .get("Translated", {})
+            .get("checkbox", False)
+        )
+        logger.info(f"Page found: {page_id} (translated: {is_translated})")
+        return PageInfo(page_id=page_id, is_translated=is_translated)
 
     async def append_blocks(self, page_id: str, blocks: List[Dict[str, Any]]) -> bool:
         """

@@ -61,14 +61,29 @@ async def process_article(
         処理結果（"success", "skipped", "failed"）
     """
     try:
-        # 1. 記事HTML取得
+        # 1. Notion既存ページを検索（翻訳前にチェックしてコスト節約）
+        if not dry_run:
+            if not publisher or not database_id:
+                logger.error("NotionPublisher or database_id not configured")
+                return "failed"
+
+            page_info = await publisher.find_page_by_url(database_id, url)
+            if not page_info:
+                logger.warning(f"Page not found for URL: {url}")
+                return "skipped"
+
+            if page_info.is_translated:
+                logger.info(f"Already translated, skipping: {url}")
+                return "skipped"
+
+        # 2. 記事HTML取得
         logger.info(f"Fetching article: {url}")
         html = await scraper.scrape_article(url)
         if not html:
             logger.error(f"Failed to fetch article: {url}")
             return "failed"
 
-        # 2. HTML→Markdown変換
+        # 3. HTML→Markdown変換
         logger.info("Converting HTML to Markdown...")
         markdown = converter.convert(html)
         if not markdown:
@@ -76,7 +91,7 @@ async def process_article(
             return "failed"
         logger.info(f"Markdown: {len(markdown)} chars")
 
-        # 3. 全文翻訳
+        # 4. 全文翻訳
         logger.info("Translating full text...")
         translated = await translator.translate(markdown)
         if not translated:
@@ -84,7 +99,7 @@ async def process_article(
             return "failed"
         logger.info(f"Translated: {len(translated)} chars")
 
-        # 4. dry-runの場合はターミナルに出力して終了
+        # 5. dry-runの場合はターミナルに出力して終了
         if dry_run:
             logger.info("=" * 60)
             logger.info("[DRY RUN] Translation result:")
@@ -92,20 +107,6 @@ async def process_article(
             print(translated)
             logger.info("=" * 60)
             return "success"
-
-        # 5. Notion既存ページを検索
-        if not publisher or not database_id:
-            logger.error("NotionPublisher or database_id not configured")
-            return "failed"
-
-        page_info = await publisher.find_page_by_url(database_id, url)
-        if not page_info:
-            logger.warning(f"Page not found for URL: {url}")
-            return "skipped"
-
-        if page_info.is_translated:
-            logger.info(f"Already translated, skipping: {url}")
-            return "skipped"
 
         # 6. Markdown→Notionブロック変換
         blocks = block_builder.build_blocks(translated)
