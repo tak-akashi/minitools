@@ -40,9 +40,7 @@ class SlackPublisher:
         """Webhook URLを設定"""
         self.webhook_url = webhook_url
 
-    async def send_message(
-        self, message: str, webhook_url: str | None = None
-    ) -> bool:
+    async def send_message(self, message: str, webhook_url: str | None = None) -> bool:
         """
         Slackにメッセージを送信
 

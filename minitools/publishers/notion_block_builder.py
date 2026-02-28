@@ -168,9 +168,7 @@ class NotionBlockBuilder:
             current_len += line_len
 
         if current_lines:
-            blocks.append(
-                self._build_code_block("\n".join(current_lines), language)
-            )
+            blocks.append(self._build_code_block("\n".join(current_lines), language))
 
         return blocks, i
 
@@ -232,9 +230,7 @@ class NotionBlockBuilder:
                     )
                 else:
                     # 不正なURL（相対パス、アンカー等）はプレーンテキストにフォールバック
-                    parts.extend(
-                        self._build_plain_rich_text(match.group(2))
-                    )
+                    parts.extend(self._build_plain_rich_text(match.group(2)))
             elif match.group(4) is not None:
                 # bold: **text**
                 parts.append(

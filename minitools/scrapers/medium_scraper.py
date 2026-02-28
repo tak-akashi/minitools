@@ -187,7 +187,7 @@ class MediumScraper:
             self._playwright = None
 
         login_timeout = 300  # 最大5分待機
-        poll_interval = 30   # 30秒ごとにチェック
+        poll_interval = 30  # 30秒ごとにチェック
 
         logger.warning(
             "\n" + "=" * 60 + "\n"
@@ -195,7 +195,8 @@ class MediumScraper:
             "  Chrome ブラウザで Medium にログインしてください。\n"
             "  （Playwright を停止済み — Google ログイン等が正常に動作します）\n"
             f"  {login_timeout}秒以内にログインしてください（{poll_interval}秒ごとに確認）。\n"
-            + "=" * 60
+            + "="
+            * 60
         )
 
         # ポーリングでログイン状態を定期チェック
@@ -207,10 +208,7 @@ class MediumScraper:
         while elapsed < login_timeout:
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
-            logger.info(
-                f"Checking Medium login status... "
-                f"({elapsed}/{login_timeout}s)"
-            )
+            logger.info(f"Checking Medium login status... ({elapsed}/{login_timeout}s)")
 
             # CDP再接続してログイン状態を確認
             try:
@@ -249,8 +247,7 @@ class MediumScraper:
 
         if not logged_in:
             logger.error(
-                f"Login not detected after {login_timeout}s. "
-                "Skipping Medium scraping."
+                f"Login not detected after {login_timeout}s. Skipping Medium scraping."
             )
             raise RuntimeError(
                 f"Medium login timeout ({login_timeout}s). "

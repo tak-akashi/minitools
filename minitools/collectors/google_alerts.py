@@ -133,12 +133,7 @@ class GoogleAlertsCollector:
                 return []
 
             service = self.gmail_service
-            response = (
-                service.users()
-                .messages()
-                .list(userId="me", q=query)
-                .execute()
-            )
+            response = service.users().messages().list(userId="me", q=query).execute()
 
             messages = response.get("messages", [])
 
@@ -382,7 +377,10 @@ class GoogleAlertsCollector:
 
                 async with aiohttp.ClientSession(connector=connector) as session:
                     async with session.get(
-                        url, headers=headers, timeout=aiohttp.ClientTimeout(total=30), allow_redirects=True
+                        url,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                        allow_redirects=True,
                     ) as response:
                         if response.status == 200:
                             html = await response.text()

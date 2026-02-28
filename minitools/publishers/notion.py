@@ -530,7 +530,9 @@ class NotionPublisher:
                 if url:
                     async with lock:
                         if url in processed_urls:
-                            logger.info(f"  並列処理内で重複のためスキップ: {display_title}")
+                            logger.info(
+                                f"  並列処理内で重複のためスキップ: {display_title}"
+                            )
                             stats["skipped"] += 1
                             results["skipped"].append(display_title)
                             return
@@ -601,9 +603,7 @@ class NotionPublisher:
             logger.error(f"Failed to update page properties ({page_id}): {e}")
             return False
 
-    async def find_page_by_url(
-        self, database_id: str, url: str
-    ) -> Optional[PageInfo]:
+    async def find_page_by_url(self, database_id: str, url: str) -> Optional[PageInfo]:
         """
         URLでNotionデータベースを検索し、既存ページの情報を返す
 
@@ -670,11 +670,9 @@ class NotionPublisher:
 
     def _extract_page_info(self, page: Dict[str, Any]) -> PageInfo:
         """NotionページデータからPageInfoを抽出する"""
-        page_id = page.get("id")
+        page_id = page.get("id", "")
         is_translated = (
-            page.get("properties", {})
-            .get("Translated", {})
-            .get("checkbox", False)
+            page.get("properties", {}).get("Translated", {}).get("checkbox", False)
         )
         logger.info(f"Page found: {page_id} (translated: {is_translated})")
         return PageInfo(page_id=page_id, is_translated=is_translated)
@@ -734,9 +732,7 @@ class NotionPublisher:
                     description=f"append_blocks(batch {batch_num}/{total_batches})",
                 )
             except Exception as e:
-                logger.error(
-                    f"  Batch {batch_num} failed after retries: {e}"
-                )
+                logger.error(f"  Batch {batch_num} failed after retries: {e}")
                 return False
 
         logger.info(f"All {len(blocks)} blocks appended successfully")

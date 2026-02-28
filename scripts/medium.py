@@ -293,9 +293,7 @@ async def main_async():
                 already_translated = 0
                 for article in translate_targets:
                     url = article.get("url", "")
-                    page_info = await notion_pub.find_page_by_url(
-                        database_id, url
-                    )
+                    page_info = await notion_pub.find_page_by_url(database_id, url)
                     if not page_info:
                         logger.warning(f"Page not found for URL: {url}")
                         continue
@@ -315,9 +313,7 @@ async def main_async():
                     translate_stats = {"success": 0, "failed": 0}
 
                     async with MediumScraper(cdp_mode=args.cdp) as scraper:
-                        for idx, (article, page_info) in enumerate(
-                            pending_targets, 1
-                        ):
+                        for idx, (article, page_info) in enumerate(pending_targets, 1):
                             url = article.get("url", "")
                             title = article.get("title", "")[:50]
                             logger.info(
@@ -327,20 +323,14 @@ async def main_async():
                             try:
                                 html = await scraper.scrape_article(url)
                                 if not html:
-                                    logger.warning(
-                                        f"  HTML取得失敗（空）: {url}"
-                                    )
+                                    logger.warning(f"  HTML取得失敗（空）: {url}")
                                     translate_stats["failed"] += 1
                                     continue
 
                                 md = converter.convert(html)
-                                logger.info(
-                                    f"  Markdown変換: {len(md)} chars"
-                                )
+                                logger.info(f"  Markdown変換: {len(md)} chars")
                                 translated = await ft_translator.translate(md)
-                                logger.info(
-                                    f"  翻訳完了: {len(translated)} chars"
-                                )
+                                logger.info(f"  翻訳完了: {len(translated)} chars")
 
                                 blocks = block_builder.build_blocks(translated)
                                 logger.info(
@@ -369,11 +359,9 @@ async def main_async():
                                     f"page_id={page_info.page_id}"
                                 )
 
-                                prop_success = (
-                                    await notion_pub.update_page_properties(
-                                        page_info.page_id,
-                                        {"Translated": {"checkbox": True}},
-                                    )
+                                prop_success = await notion_pub.update_page_properties(
+                                    page_info.page_id,
+                                    {"Translated": {"checkbox": True}},
                                 )
                                 if not prop_success:
                                     logger.error(
@@ -384,13 +372,9 @@ async def main_async():
                                     # だがチェックボックスは未更新
 
                                 translate_stats["success"] += 1
-                                logger.info(
-                                    f"  完了: {title}..."
-                                )
+                                logger.info(f"  完了: {title}...")
                             except Exception as e:
-                                logger.error(
-                                    f"  Translation error for {url}: {e}"
-                                )
+                                logger.error(f"  Translation error for {url}: {e}")
                                 translate_stats["failed"] += 1
 
                     logger.info("=" * 60)

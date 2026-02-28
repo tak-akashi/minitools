@@ -261,9 +261,7 @@ class TestNotionBlockBuilderRichText:
 
     def test_mixed_formatting(self, builder):
         """複数の書式が混在するテキスト"""
-        rich_text = builder._build_rich_text(
-            "**Bold** and *italic* and `code`"
-        )
+        rich_text = builder._build_rich_text("**Bold** and *italic* and `code`")
         assert rich_text[0]["text"]["content"] == "Bold"
         assert rich_text[0]["annotations"]["bold"] is True
         assert rich_text[1]["text"]["content"] == " and "

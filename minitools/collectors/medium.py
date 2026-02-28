@@ -564,7 +564,9 @@ class MediumCollector:
 
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        jina_url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+                        jina_url,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=30),
                     ) as response:
                         if response.status == 200:
                             text_content = await response.text()

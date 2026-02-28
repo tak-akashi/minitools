@@ -246,9 +246,7 @@ class FullTextTranslator:
                 )
                 translated = result.strip()
                 if not translated:
-                    logger.warning(
-                        f"Empty translation result (attempt {attempt + 1})"
-                    )
+                    logger.warning(f"Empty translation result (attempt {attempt + 1})")
                     continue
 
                 # 翻訳切れ検出: 比率が極端に低い場合はリトライ

@@ -31,7 +31,7 @@ from minitools.utils.logger import setup_logger
 
 load_dotenv()
 
-logger = None
+logger: logging.Logger
 
 
 async def process_article(
@@ -62,6 +62,7 @@ async def process_article(
     """
     try:
         # 1. Notion既存ページを検索（翻訳前にチェックしてコスト節約）
+        page_info = None
         if not dry_run:
             if not publisher or not database_id:
                 logger.error("NotionPublisher or database_id not configured")
@@ -112,7 +113,9 @@ async def process_article(
         blocks = block_builder.build_blocks(translated)
         logger.info(f"Built {len(blocks)} Notion blocks")
 
-        # 7. Notionページに追記
+        # 7. Notionページに追記（dry_run=Falseの場合、上のガードで確認済み）
+        assert publisher is not None
+        assert page_info is not None
         success = await publisher.append_blocks(page_info.page_id, blocks)
         if success:
             await publisher.update_page_properties(

@@ -324,7 +324,9 @@ class XTrendCollector:
             logger.warning(f"Failed to fetch timeline for @{username}")
             return []
 
-        logger.debug(f"Timeline response for @{username}: keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}")
+        logger.debug(
+            f"Timeline response for @{username}: keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}"
+        )
         tweets = self._parse_tweets(data, count)
         logger.debug(f"Found {len(tweets)} tweets from @{username}")
         return tweets

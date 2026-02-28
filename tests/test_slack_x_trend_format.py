@@ -19,7 +19,11 @@ def sample_summaries():
             TrendSummary(
                 trend_name="GPT-5",
                 topics=["OpenAIがGPT-5を正式発表", "マルチモーダル性能が大幅向上"],
-                key_opinions=["推論能力が革新的", "APIコストが懸念材料", "日本語性能も向上"],
+                key_opinions=[
+                    "推論能力が革新的",
+                    "APIコストが懸念材料",
+                    "日本語性能も向上",
+                ],
                 retweet_total=12300,
                 region="global",
             ),

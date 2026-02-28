@@ -221,7 +221,9 @@ class TestXTrendCollector:
                 mock_resp.status = 500
             else:
                 mock_resp.status = 200
-                mock_resp.json = AsyncMock(return_value={"trends": [{"name": "AI", "tweet_volume": 100}]})
+                mock_resp.json = AsyncMock(
+                    return_value={"trends": [{"name": "AI", "tweet_volume": 100}]}
+                )
             mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
             mock_resp.__aexit__ = AsyncMock(return_value=False)
             return mock_resp
@@ -230,7 +232,9 @@ class TestXTrendCollector:
         mock_session.get = mock_get
         collector.http_session = mock_session
 
-        with patch("minitools.collectors.x_trend.asyncio.sleep", new_callable=AsyncMock):
+        with patch(
+            "minitools.collectors.x_trend.asyncio.sleep", new_callable=AsyncMock
+        ):
             trends = await collector.get_trends(WOEID_JAPAN)
 
         assert len(trends) == 1
@@ -250,7 +254,9 @@ class TestXTrendCollector:
         mock_session.get = MagicMock(return_value=mock_response)
         collector.http_session = mock_session
 
-        with patch("minitools.collectors.x_trend.asyncio.sleep", new_callable=AsyncMock):
+        with patch(
+            "minitools.collectors.x_trend.asyncio.sleep", new_callable=AsyncMock
+        ):
             trends = await collector.get_trends(WOEID_JAPAN)
 
         assert trends == []
@@ -368,9 +374,7 @@ class TestXTrendCollector:
         assert result.timeline_results == []
 
     @pytest.mark.asyncio
-    async def test_collect_all_source_failure_isolation(
-        self, sample_tweets_response
-    ):
+    async def test_collect_all_source_failure_isolation(self, sample_tweets_response):
         """個別ソース失敗時の独立性テスト"""
         collector = XTrendCollector(api_key="test-key", max_retries=1)
 
